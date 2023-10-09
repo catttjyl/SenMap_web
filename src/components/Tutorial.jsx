@@ -61,9 +61,9 @@ export default function CustomizedDialogs() {
 
   return (
     <div>
-      <IconButton onClick={handleClickOpen}>
-        <Help sx={{ fontSize: "25px" }}></Help>
-      </IconButton>
+      <Button onClick={handleClickOpen}>
+        About
+      </Button>
       <BootstrapDialog
         onClose={handleClose}
         aria-labelledby="customized-dialog-title"
