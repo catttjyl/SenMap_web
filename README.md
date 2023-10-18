@@ -2,7 +2,7 @@
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).<br/>
 A preview of the website:
-
+<img width="1624" alt="Screen Shot 2023-10-11 at 11 39 09 PM" src="https://github.com/catttjyl/my_InMap/assets/92762878/807ad492-72e5-4ad4-9630-635f8f8d3723">
 
 ## Available Scripts
 
