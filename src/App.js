@@ -5,6 +5,8 @@ import { Box } from "@mui/material";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 function App() {
+  const href = window.location.href;
+  console.log(window.location);
   return (
     <Box>
       <BrowserRouter>

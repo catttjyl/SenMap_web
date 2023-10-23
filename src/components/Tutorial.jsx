@@ -62,7 +62,9 @@ export default function CustomizedDialogs() {
   return (
     <div>
       <Button onClick={handleClickOpen}>
-        About
+        <Typography color="#01579b" fontWeight="bold">
+          About
+        </Typography>
       </Button>
       <BootstrapDialog
         onClose={handleClose}
