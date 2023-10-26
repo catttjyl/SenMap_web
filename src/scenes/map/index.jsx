@@ -18,7 +18,8 @@ import {
   Stepper,
   // Step,
   StepLabel,
-  Autocomplete
+  Autocomplete,
+  Grid
 } from "@mui/material";
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
@@ -28,7 +29,7 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import pollutant from "pollutant.js";
 import { counties } from "counties.js";
 import { county_index } from "county_index.js";
-import { getZarr } from "utils/getZarr.js";
+import { getPolZarr, getSourceZarr } from "utils/getZarr.js";
 import { slice } from "zarr";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { hexToRgba } from "utils/legend.js";
@@ -62,18 +63,35 @@ const MAP_STYLE = "mapbox://styles/mapbox/streets-v10";
 let id = "id";
 let data = pollutant;
 
-const barHeight = 330;
+const barHeight = 380;
+const sectors = [
+  "Agricaulture", 
+  "Industrial", 
+  "Coal electric generation",
+  "Noncoal electric generation",
+  "Residential wood combustion",
+  "Residential gas combustion",
+  "Residential other",
+  "Road dust",
+  "Commercial cooking",
+  "Miscellaneous",
+  "Off-highway vehicles & equipments",
+  "Construction",
+  "Heavy duty diesel vehicles",
+  "Light duty gasoline vehicles",
+]
 // const percent = 0;
 // const steps = stepList;
 
 const Basemap = () => {
   // const isNonMobileScreens = useMediaQuery("(min-width:1000px)");
   // const isMinimumScreens = useMediaQuery("(max-width:550px)");
-  const [emission, setEmission] = React.useState(100);
+  const [emission, setEmission] = React.useState(50);
   const [percentage, setPercentage] = React.useState(0.0);
   const [activeStep, setActiveStep] = React.useState(0);     //mui step test
   const [county, setCounty] = React.useState(0);
-  // const [location, setLocation] = React.useState(0);
+  const [sector, setSector] = React.useState("");
+  const [location, setLocation] = React.useState(0);
   const [disable, setDisable] = React.useState(false);
   const [total, setTotal] = React.useState(0.0);    // Total concentration of PM2.5
   const [PWAvg, setPWAvg] = React.useState(0.0);    // Population-weighted Average concentration of PM2.5
@@ -85,17 +103,24 @@ const Basemap = () => {
 
   const handleCountyChange = (event, newValue) => {
     // setCounty(event.target.value);
-    setCounty(newValue === null ? 0: newValue.properties.GEOID);
-    // setLocation(county_index[event.target.value]);
+    console.log(newValue);
+    let code = newValue === null ? 0: newValue.properties.GEOID;
+    setCounty(code);
+    setLocation(county_index[code]);
+    // console.log("location", location);
     setPercentage(5);
     setActiveStep((prevActiveStep) => prevActiveStep + 1);    //mui step
   };
 
-  const handleEmissionChange = (event) => {
-    setEmission(event.target.value);
+  const handleSectorChange = (event, newValue) => {
+    setSector(newValue);
     setPercentage(35);
   };
 
+  const handleEmissionChange = (event, newValue) => {
+    setEmission(newValue);
+    setPercentage(50);
+  };
 
   const options = {
     pickable: true,
@@ -135,24 +160,43 @@ const Basemap = () => {
     setActiveStep((prevActiveStep) => prevActiveStep + 1); //mui step
     setPercentage(100);
     setDisable(true);
-    const pNO3_cloud = await getZarr("pNO3");
-    const pSO4_cloud = await getZarr("pSO4");
+    // const pNO3_cloud = await getPolZarr("pNO3");
+    // const pSO4_cloud = await getPolZarr("pSO4");
     // console.log("NOx", NOx_cloud);
-    const Pop_could = await getZarr("TotalPop");
+    const src_could = await getSourceZarr(
+      sector === "Agricaulture" ? "Ag": 
+      sector === "Industrial" ? "Industrial":
+      sector === "Coal electric generation" ? "Coal_Elec":
+      sector === "Noncoal electric generation" ? "Non-Coal_Elec":
+      sector === "Residential wood combustion" ? "Res_Wood":
+      sector === "Residential gas combustion" ? "Res_Gas":
+      sector === "Residential other" ? "Res_Other":
+      sector === "Road dust" ? "Road_Dst":
+      sector === "Commercial cooking" ? "Cooking":
+      sector === "Miscellaneous" ? "Misc":
+      sector === "Off-highway vehicles & equipments" ? "Offroad":
+      sector === "Construction" ? "Const":
+      sector === "Heavy duty diesel vehicles" ? "Diesel_HD_Veh": "Gas_LD_Veh")
+    const Pop_could = await getPolZarr("TotalPop");
     // console.log("population", Pop_could);
-    const MR_could = await getZarr("MortalityRate");
+    const MR_could = await getPolZarr("MortalityRate");
     // console.log("death", MR_could);
 
-    let pNO3_curr = await pNO3_cloud
-      .get([0, county, slice(null, 52411)])
-      .then(async (data) => await data.data);
-    let pSO4_curr = await pSO4_cloud
-      .get([0, county, slice(null, 52411)])
+    // let pNO3_curr = await pNO3_cloud
+    //   .get([0, location, slice(null, 52411)])
+    //   .then(async (data) => await data.data);
+    // let pSO4_curr = await pSO4_cloud
+    //   .get([0, location, slice(null, 52411)])
+    //   .then(async (data) => await data.data);
+    console.log("county", county);
+    console.log("county_ind", location);
+    console.log("sector", sector);
+    let src_curr = await src_could
+      .get([0, location, slice(null, 52411)])
       .then(async (data) => await data.data);
     let Pop_curr = await Pop_could
       .get([slice(null, 52411),])
       .then(async (data) => await data.data);
-    console.log("NO3", pNO3_curr);
     let MR_curr = await MR_could
       .get([slice(null, 52411),])
       .then(async (data) => await data.data);
@@ -163,10 +207,9 @@ const Basemap = () => {
     let totalPop = 0;
     let tmpDsk = 0;
     let tmpDsL = 0;
+    console.log("emission", emission);
     for (let i = 0; i < 52411; i++) {
-      let curr = 
-        28766.639  * emission / 100 *
-        (pNO3_curr[i] * 4.559802574 + pSO4_curr[i] * 0.933589854);
+      let curr = emission * 2 / 100 * src_curr[i];
       
       data.features[i].properties.TotalPM25 += curr;
       tmpTotal += data.features[i].properties.TotalPM25;
@@ -177,9 +220,9 @@ const Basemap = () => {
       tmpDsL += (Math.exp(Math.log(1.14)/10 * curr) - 1) * Pop_curr[i] * 1.0465819687408728 * MR_curr[i] / 100000 * 1.025229357798165;
 
       if (data.features[i].properties.TotalPM25 > max) {
-        console.log(data.features[i].properties.TotalPM25);
+        // console.log(data.features[i].properties.TotalPM25);
         max = data.features[i].properties.TotalPM25;
-        console.log("max", max);
+        // console.log("max", max);
       }
     }
     setTotal(total+tmpTotal);
@@ -205,6 +248,9 @@ const Basemap = () => {
     for (let i = 0; i < 52411; i++) {
       data.features[i].properties.TotalPM25 = 0;
     }
+    setEmission(50);
+    setCounty(0);
+    setPercentage(0);
     setTotal(0.0);
     setPWAvg(0.0);
     setDeathsK(0.0);
@@ -215,7 +261,7 @@ const Basemap = () => {
         id,
         data,
         ...options,
-        getFillColor: [0, 0, 0, 150]
+        getFillColor: [0, 0, 0, 0]
       })
     );
     console.log('done');
@@ -224,14 +270,15 @@ const Basemap = () => {
 
   const stepList = [
     { label: 
-      <Box>
+      <Box sx={{mt: -0.5}}>
         <Label>
           Your Location
         </Label>
         <Autocomplete
-          disablePortal
           id="counties-search-bar"
-          options={counties.features}
+          // options={counties.features}
+          options={counties.features.sort((a,b) => a.properties.NAME[0].localeCompare(b.properties.NAME[0]))}
+
           sx={{ width: "130%" }}
           onChange={handleCountyChange}
           getOptionLabel={(option) => option.properties.NAME}
@@ -246,31 +293,40 @@ const Basemap = () => {
             <TextField 
               {...feature}
               label="Enter County..."
-              variant="standard"
+              variant="filled"
             />
           }
         />
-        {/* <FormControl variant="standard" sx={{ minWidth: 220}}>
-          <InputLabel id="demo-simple-select-standard-label">Enter County...</InputLabel>
-          <Select
-            labelId="demo-simple-select-standard-label"
-            id="demo-simple-select-standard"
-            value={county}
-            onChange={handleCountyChange}
-            label="age"
-          >
-            <MenuItem value="">
-              <em>Enter County...</em>
-            </MenuItem>
-            {counties.features.map((feature, i) => {
-              return (
-                <MenuItem key={i} value={feature.properties.GEOID}>
-                  {feature.properties.NAME}
-                </MenuItem>
-              );
-            })}
-          </Select>
-        </FormControl>  */}
+      </Box>
+    },
+    { label: 
+      <Box sx={{mt: -0.5}}>
+        <Label>
+          Pollutant Sourse
+        </Label>
+        <Autocomplete
+          id="choose-sectors"
+          options={sectors}
+          style={{ width: "185%" }}
+          display="inline"
+          onChange={handleSectorChange}
+          // getOptionLabel={(option) => option.properties.NAME}
+          // renderOption={(props, option) => {
+          //   return (
+          //     <li {...props} key={option.GEOID}>
+          //       {option.properties.NAME}
+          //     </li>
+          //   );
+          // }}
+          renderInput={(feature) => 
+            <TextField 
+              {...feature}
+              label="Choose a source..."
+              variant="filled"
+              display="inline"
+            />
+          }
+        />
       </Box>
     },
     { label:
@@ -279,48 +335,48 @@ const Basemap = () => {
           Define Emission Amount
         </Label>
         <Stack spacing={2} direction="row" sx={{ mb: 1 }} alignItems="center">
-          <Typography>Low</Typography>
+          <Typography>0%</Typography>
           <Slider
+            // key={`slider-${emission}`}
             onChange={handleEmissionChange}
+            value={emission}
+            aria-label="Emission"
             sx={{
               width: 220,
               mb: "10px",
               display: "block",
-              "& .MuiSlider-rail": {
-                color: "grey",
-                height: "20px",
-                borderRadius: 0,
-                clipPath: "polygon(0% 75%,100% 0%,100% 100%,0% 100%)",
-                // background: `linear-gradient(90deg, #ccc 10%, #F74 10%, #F74 80%, #ccc 80%)`,
-                opacity: 1
-              },
-              "& .MuiSlider-track": {
-                height: "20px",
-                borderRadius: 0,
-                clipPath: `polygon(0% 75%,100% ${75-emission/100*75}%,100% 100%,0% 100%)`,
-              },
-              "& .MuiSlider-thumb": {
-                top: "70%",
-                backgroundColor: "green",
-                border: "4px solid #fff",
-                boxShadow:
-                  "0px 3px 1px -2px rgba(0,0,0,0.2), 0px 2px 2px 0px rgba(0,0,0,0.14), 0px 1px 5px 0px rgba(0,0,0,0.12)",
-                "&:before": {
-                  boxShadow: "none"
-                }
-              },
-              "& [data-index='0']:not(.MuiSlider-markLabel)": {
-                // This `top` math is gross, but I needed to shift the thumbs up based on value -- could be improved
-                top: `${70 - emission / 5}%`,
-                width: `calc(20px + ${0.1 * emission}px)`,
-                height: `calc(20px + ${0.1 * emission}px)`
-              },
+              // "& .MuiSlider-rail": {
+              //   color: "grey",
+              //   height: "20px",
+              //   borderRadius: 0,
+              //   clipPath: "polygon(0% 75%,100% 0%,100% 100%,0% 100%)",
+              //   // background: `linear-gradient(90deg, #ccc 10%, #F74 10%, #F74 80%, #ccc 80%)`,
+              //   opacity: 1
+              // },
+              // "& .MuiSlider-track": {
+              //   height: "20px",
+              //   borderRadius: 0,
+              //   clipPath: `polygon(0% 75%,100% ${75-emission/100*75}%,100% 100%,0% 100%)`,
+              // },
+              // "& .MuiSlider-thumb": {
+              //   top: "70%",
+              //   backgroundColor: "green",
+              //   border: "4px solid #fff",
+              //   boxShadow:
+              //     "0px 3px 1px -2px rgba(0,0,0,0.2), 0px 2px 2px 0px rgba(0,0,0,0.14), 0px 1px 5px 0px rgba(0,0,0,0.12)",
+              //   "&:before": {
+              //     boxShadow: "none"
+              //   }
+              // },
+              // "& [data-index='0']:not(.MuiSlider-markLabel)": {
+              //   // This `top` math is gross, but I needed to shift the thumbs up based on value -- could be improved
+              //   top: `${70 - emission / 5}%`,
+              //   width: `calc(20px + ${0.1 * emission}px)`,
+              //   height: `calc(20px + ${0.1 * emission}px)`
+              // },
             }}
-            defaultValue={emission}
-            aria-label="Default"
-            valueLabelDisplay="auto"
           />
-          <Typography>High</Typography>
+          <Typography>200%</Typography>
         </Stack>
       </Box>
     },
@@ -421,6 +477,7 @@ const Basemap = () => {
                 ))}
               </Stepper>
             </Box> */}
+            <Grid display="flex" justifyContent="flex-end">
             <Stack spacing={2} direction="row" alignItems="center">
               <WarningAmberIcon/>
               <Slider
@@ -445,9 +502,14 @@ const Basemap = () => {
               />
               <SentimentVerySatisfiedIcon/>
             </Stack>
+            </Grid>
             <Box>
               <IconButton><FileDownloadIcon/></IconButton>
-              <Button>reset</Button>
+              <Button
+                onClick={handleReset}
+              >
+                reset
+              </Button>
             </Box>
           </Box>
         </Box>

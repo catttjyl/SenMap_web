@@ -28,7 +28,7 @@ export const ResultBtn = (props) => (
       mt: "0.5rem",
     }}
   >
-      <Typography color="black">{props.children}</Typography>
+      <Typography color="black" fontSize={15}>{props.children}</Typography>
   </Button>
   //customized typography
 );

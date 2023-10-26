@@ -30,18 +30,18 @@ export const MyBox = styled(Box)({
 });
 
 export const ProgressContainer = styled(Box)({
-  backgroundColor: "grey",
+  backgroundColor: "#7F99AE",
   height: "100%",
   position: "relative",
-  width: "0.1rem"
+  width: "0.2rem"
 });
 
 export const ProgressBar = styled(Box)({
-  backgroundColor: "black",
+  backgroundColor: "##B79F8C",
   position: "absolute",
   top: 0,
   transition: "height 150ms",
-  width: "0.1rem",
+  width: "0.2rem",
   zIndex: 1
 });
 
@@ -70,9 +70,10 @@ export const MyStep = ({ complete, label }) => {
   const completeIcon = (
     <CircleOutlinedIcon 
       sx={{ 
-        bgcolor:"#b23c17", 
+        // bgcolor:"#b23c17", 
+        bgcolor:"#B34B3E",
         borderRadius: "50%",
-        color: "grey",
+        color: "#A68972",
         fontSize:"large"
       }}
     />
