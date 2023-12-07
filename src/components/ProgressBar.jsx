@@ -53,7 +53,7 @@ export const StepsContainer = styled(Box)({
   position: "absolute"
 });
 
-const Steps = styled(Step)({
+const Steps = styled(Box)({
   alignItems: "flex-end",
   display: "flex",
   position: "relative",

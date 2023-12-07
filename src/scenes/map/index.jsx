@@ -26,9 +26,10 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import SentimentVerySatisfiedIcon from '@mui/icons-material/SentimentVerySatisfied';
 import { MapProvider } from 'react-map-gl'
 import "mapbox-gl/dist/mapbox-gl.css";
-import pollutant from "pollutant.js";
-import { counties } from "counties.js";
-import { county_index } from "county_index.js";
+import pollutant from "data/pollutant.js";
+import { counties } from "data/counties.js";
+import { county_index } from "data/county_indexn.js";
+import simulations from "data/simulations.js";
 import { getPolZarr, getSourceZarr } from "utils/getZarr.js";
 import { slice } from "zarr";
 import useMediaQuery from "@mui/material/useMediaQuery";
@@ -61,11 +62,11 @@ const INITIAL_VIEW_STATE = {
 const MAP_STYLE = "mapbox://styles/mapbox/streets-v10";
 
 let id = "id";
-let data = pollutant;
+let data = simulations;
 
 const barHeight = 380;
 const sectors = [
-  "Agricaulture", 
+  "Agriculture", 
   "Industrial", 
   "Coal electric generation",
   "Noncoal electric generation",
@@ -85,7 +86,7 @@ const sectors = [
 
 const Basemap = () => {
   // const isNonMobileScreens = useMediaQuery("(min-width:1000px)");
-  // const isMinimumScreens = useMediaQuery("(max-width:550px)");
+  const isMinimumScreens = useMediaQuery("(max-width:550px)");
   const [emission, setEmission] = React.useState(50);
   const [percentage, setPercentage] = React.useState(0.0);
   const [activeStep, setActiveStep] = React.useState(0);     //mui step test
@@ -98,18 +99,24 @@ const Basemap = () => {
   const [deathsK, setDeathsK] = React.useState(0.0);    // Total number of deaths
   const [deathsL, setDeathsL] = React.useState(0.0);    // Assume a 14% increase in morality rate for every 10 μg/m³ increase in PM2.5 concentration (instead of 6%)
   let max = 0;
+  const findMax = (data, max) => {
+    return data.properties.TotalPM25 > max ? data.properties.TotalPM25 : max;
+  };
+  max = data.features.reduce((max, item) => findMax(item, max), 0);
+  // let currMax = initMax;
+  // console.log("max", initMax);
 
   const progressBarHeight = Math.floor(barHeight * (percentage / 100));
 
   const handleCountyChange = (event, newValue) => {
     // setCounty(event.target.value);
-    console.log(newValue);
+    console.log("event",event.target);
+    console.log("newValue",newValue);
     let code = newValue === null ? 0: newValue.properties.GEOID;
     setCounty(code);
     setLocation(county_index[code]);
     // console.log("location", location);
     setPercentage(5);
-    setActiveStep((prevActiveStep) => prevActiveStep + 1);    //mui step
   };
 
   const handleSectorChange = (event, newValue) => {
@@ -132,9 +139,10 @@ const Basemap = () => {
     lineWidthMinPixels: 2,
     getFillColor: (data) => {
       // let opacity = data.properties.TotalPM25 === 0 ? 0 : 150;
-      let index = Math.round((1 - data.properties.TotalPM25/max) * 255);
-      let opacity = index === 255 ? 0 : 150;
-      let color = hexToRgba(colors[index], opacity);
+      let index = Math.round(data.properties.TotalPM25/max * 255);
+      let opacity = index === 0 ? 0 : 150;
+      let color = hexToRgba(colors[index], 150);
+    
       return color;
       // let R = Math.round((data.properties.TotalPM25/max) * 255);
       // let G = Math.round((1 - data.properties.TotalPM25/max) * 255);
@@ -164,7 +172,7 @@ const Basemap = () => {
     // const pSO4_cloud = await getPolZarr("pSO4");
     // console.log("NOx", NOx_cloud);
     const src_could = await getSourceZarr(
-      sector === "Agricaulture" ? "Ag": 
+      sector === "Agriculture" ? "Ag": 
       sector === "Industrial" ? "Industrial":
       sector === "Coal electric generation" ? "Coal_Elec":
       sector === "Noncoal electric generation" ? "Non-Coal_Elec":
@@ -395,8 +403,8 @@ const Basemap = () => {
         <Label>
           Interpret Data
         </Label>
-        <ResultBtn>How healthy is the air?</ResultBtn>
-        <ResultBtn>Where is the pollution coming from?</ResultBtn>
+        <ResultBtn>How does this impact public health?</ResultBtn>
+        {/* <ResultBtn>Where is the pollution coming from?</ResultBtn> */}
         <ResultBtn>Who is most affected?</ResultBtn>
       </Box>
     }
@@ -477,7 +485,6 @@ const Basemap = () => {
                 ))}
               </Stepper>
             </Box> */}
-            <Grid display="flex" justifyContent="flex-end">
             <Stack spacing={2} direction="row" alignItems="center">
               <WarningAmberIcon/>
               <Slider
@@ -502,7 +509,6 @@ const Basemap = () => {
               />
               <SentimentVerySatisfiedIcon/>
             </Stack>
-            </Grid>
             <Box>
               <IconButton><FileDownloadIcon/></IconButton>
               <Button

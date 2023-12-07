@@ -19,20 +19,6 @@ const Navbar = () => {
           >
             Sen
           </Typography>
-          {/* <Typography
-            fontSize="clamp(1rem, 3rem, 4.25rem)"
-            color="#ffeb3b"
-            // onClick={() => navigate("/")}
-          >
-            e
-          </Typography>
-          <Typography
-            fontSize="clamp(1rem, 3rem, 4.25rem)"
-            color="#419645"
-            // onClick={() => navigate("/")}
-          >
-            n
-          </Typography> */}
           <Typography
             fontWeight="bold"
             fontSize="clamp(1rem, 3rem, 4.25rem)"
