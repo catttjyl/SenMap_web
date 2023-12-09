@@ -37,5 +37,6 @@ export const Label = styled(Typography)({
   fontWeight: "bold",
   fontSize: 18,
   fontFamily: 'BlinkMacSystemFont',
-  color: "#212121"
+  color: "#212121",
+  margin:"5px",
 });

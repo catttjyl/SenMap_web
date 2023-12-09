@@ -8,7 +8,7 @@ import {
   TextField,
   FormControl,
   MenuItem,
-  InputLabel,
+  Input,
   Select,
   Button,
   IconButton,
@@ -16,30 +16,33 @@ import {
   Typography,
   Stack,
   Stepper,
-  // Step,
+  Step,
   StepLabel,
+  StepContent,
   Autocomplete,
+  StepConnector,
   Grid
 } from "@mui/material";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import SentimentVerySatisfiedIcon from '@mui/icons-material/SentimentVerySatisfied';
 import { MapProvider } from 'react-map-gl'
 import "mapbox-gl/dist/mapbox-gl.css";
 import pollutant from "data/pollutant.js";
+import simulations from "data/simulations.js";
 import { counties } from "data/counties.js";
 import { county_index } from "data/county_indexn.js";
-import simulations from "data/simulations.js";
 import { getPolZarr, getSourceZarr } from "utils/getZarr.js";
 import { slice } from "zarr";
-import useMediaQuery from "@mui/material/useMediaQuery";
 import { hexToRgba } from "utils/legend.js";
 import { colors } from "utils/colors.js";
 import { ReactNotifications, Store } from 'react-notifications-component'
 import 'react-notifications-component/dist/theme.css'
 import { DeckRenderer } from "deck.gl";
 import {FlexBetween, ResultBtn, Label} from "components/CompOvrd";
-import {MyBox, ProgressContainer, ProgressBar, StepsContainer, MyStep, ProgressStepper} from "components/ProgressBar";
+import {MyBox, ProgressContainer, ProgressBar, StepsContainer, MyStep, ProgressStepper, CustomIcon} from "components/ProgressBar";
+import PercentIcon from '@mui/icons-material/Percent';
 
 const MAPBOX_ACCESS_TOKEN =
   "pk.eyJ1Ijoic2hhd25yYW4xODIiLCJhIjoiY2w5NXRvMDRjMmhhYzN3dDUyOGo0ZmdpeCJ9.RuSR6FInH2tUyctzdnilrw";
@@ -117,17 +120,36 @@ const Basemap = () => {
     setLocation(county_index[code]);
     // console.log("location", location);
     setPercentage(5);
+    setActiveStep(1);
   };
 
   const handleSectorChange = (event, newValue) => {
     setSector(newValue);
     setPercentage(35);
+    setActiveStep(2);
   };
 
   const handleEmissionChange = (event, newValue) => {
     setEmission(newValue);
     setPercentage(50);
+    setActiveStep(3);
   };
+
+  const handleInputEmissionChange = (event, newValue) => {
+    console.log("emission input newval", event.target)
+    setEmission(event.target.value === '' ? 0 : Number(event.target.value / 2));
+    setPercentage(50);
+    setActiveStep(3);
+  };
+
+  const handleBlur = () => {
+    if (emission < 0) {
+      setEmission(0);
+    } else if (emission > 100) {
+      setEmission(100);
+    }
+  };
+
 
   const options = {
     pickable: true,
@@ -251,6 +273,17 @@ const Basemap = () => {
     setDisable(false);
   }
 
+  const handleNext = () => {
+    setActiveStep((prevActiveStep) => prevActiveStep + 1);
+  };
+
+  const handleBack = () => {
+    setActiveStep((prevActiveStep) => prevActiveStep - 1);
+  };
+
+  
+
+
   const handleReset = async () => {
     setDisable(true);
     for (let i = 0; i < 52411; i++) {
@@ -278,16 +311,15 @@ const Basemap = () => {
 
   const stepList = [
     { label: 
-      <Box sx={{mt: -0.5}}>
         <Label>
           Your Location
-        </Label>
+        </Label>,
+      content:
         <Autocomplete
           id="counties-search-bar"
           // options={counties.features}
           options={counties.features.sort((a,b) => a.properties.NAME[0].localeCompare(b.properties.NAME[0]))}
-
-          sx={{ width: "130%" }}
+          sx={{ width: "210px" }}
           onChange={handleCountyChange}
           getOptionLabel={(option) => option.properties.NAME}
           renderOption={(props, option) => {
@@ -305,17 +337,16 @@ const Basemap = () => {
             />
           }
         />
-      </Box>
     },
     { label: 
-      <Box sx={{mt: -0.5}}>
         <Label>
           Pollutant Sourse
-        </Label>
+        </Label>,
+      content:
         <Autocomplete
           id="choose-sectors"
           options={sectors}
-          style={{ width: "185%" }}
+          sx={{ width: "300px" }}
           display="inline"
           onChange={handleSectorChange}
           // getOptionLabel={(option) => option.properties.NAME}
@@ -335,60 +366,49 @@ const Basemap = () => {
             />
           }
         />
-      </Box>
     },
     { label:
-      <Box>
         <Label gutterBottom>
           Define Emission Amount
-        </Label>
-        <Stack spacing={2} direction="row" sx={{ mb: 1 }} alignItems="center">
-          <Typography>0%</Typography>
+        </Label>,
+      content:
+        <Stack direction="row" spacing={0} alignItems="center" sx={{ml:2}}>
           <Slider
-            // key={`slider-${emission}`}
-            onChange={handleEmissionChange}
             value={emission}
+            onChange={handleEmissionChange}
+            valueLabelFormat={2*emission}
             aria-label="Emission"
             sx={{
-              width: 220,
-              mb: "10px",
+              width: "240px",
               display: "block",
-              // "& .MuiSlider-rail": {
-              //   color: "grey",
-              //   height: "20px",
-              //   borderRadius: 0,
-              //   clipPath: "polygon(0% 75%,100% 0%,100% 100%,0% 100%)",
-              //   // background: `linear-gradient(90deg, #ccc 10%, #F74 10%, #F74 80%, #ccc 80%)`,
-              //   opacity: 1
-              // },
-              // "& .MuiSlider-track": {
-              //   height: "20px",
-              //   borderRadius: 0,
-              //   clipPath: `polygon(0% 75%,100% ${75-emission/100*75}%,100% 100%,0% 100%)`,
-              // },
-              // "& .MuiSlider-thumb": {
-              //   top: "70%",
-              //   backgroundColor: "green",
-              //   border: "4px solid #fff",
-              //   boxShadow:
-              //     "0px 3px 1px -2px rgba(0,0,0,0.2), 0px 2px 2px 0px rgba(0,0,0,0.14), 0px 1px 5px 0px rgba(0,0,0,0.12)",
-              //   "&:before": {
-              //     boxShadow: "none"
-              //   }
-              // },
-              // "& [data-index='0']:not(.MuiSlider-markLabel)": {
-              //   // This `top` math is gross, but I needed to shift the thumbs up based on value -- could be improved
-              //   top: `${70 - emission / 5}%`,
-              //   width: `calc(20px + ${0.1 * emission}px)`,
-              //   height: `calc(20px + ${0.1 * emission}px)`
-              // },
+              mb: -1,
+              "& .MuiSlider-markLabel": {
+                fontSize: "0.8rem",
+              },
             }}
+            marks={[
+              {value: 0, label: "0%"},
+              {value: 50, label: "100%"},
+              {value: 100, label: "200%"}
+            ]}
           />
-          <Typography>200%</Typography>
+          <Input
+            value={emission*2}
+            onChange={handleInputEmissionChange}
+            onBlur={handleBlur}
+            inputProps={{
+              min: 0,
+              max: 200,
+              type: 'number',
+              'aria-labelledby': 'input-slider',
+            }}
+            sx={{width: "45px", ml: 3}}
+          />
+          <Typography sx={{ml: -2}}>%</Typography>
         </Stack>
-      </Box>
     },
-    { label:    //autocomplet, Load on open
+    { label: null,
+      content:
       <Button
       variant="contained"
       sx={{bgcolor: "#F44336"}}
@@ -399,14 +419,15 @@ const Basemap = () => {
       </Button>
     },
     { label: 
-      <Box sx={{mt: "-5%"}}>
         <Label>
           Interpret Data
-        </Label>
-        <ResultBtn>How does this impact public health?</ResultBtn>
-        {/* <ResultBtn>Where is the pollution coming from?</ResultBtn> */}
-        <ResultBtn>Who is most affected?</ResultBtn>
-      </Box>
+        </Label>,
+      content:
+        <Box>
+          <ResultBtn>How does this impact public health?</ResultBtn>
+          {/* <ResultBtn>Where is the pollution coming from?</ResultBtn> */}
+          <ResultBtn>Who is most affected?</ResultBtn>
+        </Box>
     }
   ];
   
@@ -450,13 +471,14 @@ const Basemap = () => {
               left: "3%",
               top: "100px",
               height: "650px",
+              maxWidth: "375px",
               position: "absolute",
               display: "flex",
               justifyContent: "space-between",
               alignItems: 'flex-start',
             }}
           >
-            <MyBox sx={{height: `${barHeight}px`, mb:"20%"}}>
+            {/* <MyBox sx={{height: `${barHeight}px`, mb:"20%"}}>
               <ProgressContainer>
                 <ProgressBar
                     style={{
@@ -473,18 +495,72 @@ const Basemap = () => {
                     />
                 ))}
               </StepsContainer>
-            </MyBox>
-            {/* <Box sx={{ maxWidth: 400 }}>
-              <Stepper activeStep={activeStep} orientation="vertical">
-                {stepList.map((step) => (
-                  <Step key={step.label}>
-                    <StepLabel>
-                      {step.label}
-                    </StepLabel>
-                  </Step>
-                ))}
-              </Stepper>
-            </Box> */}
+            </MyBox> */}
+            <Stepper
+              activeStep={activeStep} 
+              orientation="vertical" 
+              sx={{
+                "& .MuiStepConnector-line": {
+                  // borderTopWidth: "4px",
+                  borderLeft: "2.5px solid #7F99AE",
+                },
+                // "& .MuiStepConnector-root.Mui-active .MuiStepConnector-line": {
+                //   borderColor: "red",
+                // },
+                // "& .MuiStepConnector-root.Mui-completed .MuiStepConnector-line": {
+                //   borderColor: "green",
+                // },
+                "& .MuiStep-root": {
+                  "& .MuiStepLabel-root": {
+                    padding: 0,
+                    height: 17,
+                  },
+                },
+                "& .MuiStepConnector-root": {
+                  ml: "8px",
+                },
+                "& .MuiStepContent-root": {
+                  ml: "8px",
+                  borderLeft: "2.5px solid #7F99AE",
+                }
+              }}
+            >
+              {stepList.map((step, index) => (
+                <Step key={step.label} active={isMinimumScreens ? undefined : true}>
+                  <StepLabel
+                    StepIconComponent={CustomIcon}
+                    optional={
+                      index === 4 ? (
+                        <Typography variant="caption">Click on the question you are interested in.</Typography>
+                      ) : null
+                    }
+                  >
+                    {step.label}
+                  </StepLabel>
+                  <StepContent>
+                    <Typography>{step.content}</Typography>
+                    {/* <Box>
+                      <div>
+                        <Button
+                          variant="contained"
+                          onClick={handleNext}
+                          sx={{ mt: 1, mr: 1 }}
+                        >
+                          {index === stepList.length - 1 ? "Finish" : "Continue"}
+                        </Button>
+                        <Button
+                          disabled={index === 0}
+                          onClick={handleBack}
+                          sx={{ mt: 1, mr: 1 }}
+                        >
+                          Back
+                        </Button>
+                      </div>
+                    </Box> */}
+                  </StepContent>
+                </Step>
+              ))}
+            </Stepper>
             <Stack spacing={2} direction="row" alignItems="center">
               <WarningAmberIcon/>
               <Slider

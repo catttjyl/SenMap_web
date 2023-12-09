@@ -1,4 +1,4 @@
-# Getting Started with InMAP web tool
+# Getting Started with SenMAP web tool
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).<br/>
 A preview of the website:
