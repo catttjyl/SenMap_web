@@ -66,8 +66,8 @@ const MAP_STYLE = "mapbox://styles/mapbox/streets-v10";
 
 let id = "id";
 let data = simulations;
+console.log("data", data);
 
-const barHeight = 380;
 const sectors = [
   "Agriculture", 
   "Industrial", 
@@ -91,7 +91,6 @@ const Basemap = () => {
   // const isNonMobileScreens = useMediaQuery("(min-width:1000px)");
   const isMinimumScreens = useMediaQuery("(max-width:550px)");
   const [emission, setEmission] = React.useState(50);
-  const [percentage, setPercentage] = React.useState(0.0);
   const [activeStep, setActiveStep] = React.useState(0);     //mui step test
   const [county, setCounty] = React.useState(0);
   const [sector, setSector] = React.useState("");
@@ -105,51 +104,9 @@ const Basemap = () => {
   const findMax = (data, max) => {
     return data.properties.TotalPM25 > max ? data.properties.TotalPM25 : max;
   };
-  max = data.features.reduce((max, item) => findMax(item, max), 0);
-  // let currMax = initMax;
-  // console.log("max", initMax);
-
-  const progressBarHeight = Math.floor(barHeight * (percentage / 100));
-
-  const handleCountyChange = (event, newValue) => {
-    // setCounty(event.target.value);
-    console.log("event",event.target);
-    console.log("newValue",newValue);
-    let code = newValue === null ? 0: newValue.properties.GEOID;
-    setCounty(code);
-    setLocation(county_index[code]);
-    // console.log("location", location);
-    setPercentage(5);
-    setActiveStep(1);
-  };
-
-  const handleSectorChange = (event, newValue) => {
-    setSector(newValue);
-    setPercentage(35);
-    setActiveStep(2);
-  };
-
-  const handleEmissionChange = (event, newValue) => {
-    setEmission(newValue);
-    setPercentage(50);
-    setActiveStep(3);
-  };
-
-  const handleInputEmissionChange = (event, newValue) => {
-    console.log("emission input newval", event.target)
-    setEmission(event.target.value === '' ? 0 : Number(event.target.value / 2));
-    setPercentage(50);
-    setActiveStep(3);
-  };
-
-  const handleBlur = () => {
-    if (emission < 0) {
-      setEmission(0);
-    } else if (emission > 100) {
-      setEmission(100);
-    }
-  };
-
+  let ini_max = data.features.reduce((max, item) => findMax(item, max), 0);
+  let curr_max = ini_max;
+  var colorString = colors.join(', ');
 
   const options = {
     pickable: true,
@@ -161,16 +118,11 @@ const Basemap = () => {
     lineWidthMinPixels: 2,
     getFillColor: (data) => {
       // let opacity = data.properties.TotalPM25 === 0 ? 0 : 150;
-      let index = Math.round(data.properties.TotalPM25/max * 255);
+      let index = Math.round(data.properties.TotalPM25/curr_max * 255);
       let opacity = index === 0 ? 0 : 150;
       let color = hexToRgba(colors[index], 150);
     
       return color;
-      // let R = Math.round((data.properties.TotalPM25/max) * 255);
-      // let G = Math.round((1 - data.properties.TotalPM25/max) * 255);
-      // let B = 0;
-      // let opacity = G === 255 ? 0 : 150;
-      // return [R,G,B,opacity];
     },
     getLineColor: [0, 0, 255, 200],
     getPointRadius: 100,
@@ -186,9 +138,43 @@ const Basemap = () => {
     })
   );
 
+  const handleCountyChange = (event, newValue) => {
+    // setCounty(event.target.value);
+    console.log("event",event.target);
+    console.log("newValue",newValue);
+    let code = newValue === null ? 0: newValue.properties.GEOID;
+    setCounty(code);
+    setLocation(county_index[code]);
+    // console.log("location", location);
+    setActiveStep(1);
+  };
+
+  const handleSectorChange = (event, newValue) => {
+    setSector(newValue);
+    setActiveStep(2);
+  };
+
+  const handleEmissionChange = (event, newValue) => {
+    setEmission(newValue);
+    setActiveStep(3);
+  };
+
+  const handleInputEmissionChange = (event, newValue) => {
+    console.log("emission input newval", event.target)
+    setEmission(event.target.value === '' ? 0 : Number(event.target.value / 2));
+    setActiveStep(3);
+  };
+
+  const handleBlur = () => {
+    if (emission < 0) {
+      setEmission(0);
+    } else if (emission > 100) {
+      setEmission(100);
+    }
+  };
+
   const handleSubmit = async () => {
-    setActiveStep((prevActiveStep) => prevActiveStep + 1); //mui step
-    setPercentage(100);
+    setActiveStep(4);
     setDisable(true);
     // const pNO3_cloud = await getPolZarr("pNO3");
     // const pSO4_cloud = await getPolZarr("pSO4");
@@ -240,8 +226,8 @@ const Basemap = () => {
     console.log("emission", emission);
     for (let i = 0; i < 52411; i++) {
       let curr = emission * 2 / 100 * src_curr[i];
-      
-      data.features[i].properties.TotalPM25 += curr;
+      data.features[i].properties.TotalPM25 = curr;
+
       tmpTotal += data.features[i].properties.TotalPM25;
       totalPop += Pop_curr[i];
       // console.log("population/grid: " + Pop_curr[i]);
@@ -249,9 +235,9 @@ const Basemap = () => {
       tmpDsk += (Math.exp(Math.log(1.06)/10 * curr) - 1) * Pop_curr[i] * 1.0465819687408728 * MR_curr[i] / 100000 * 1.025229357798165;
       tmpDsL += (Math.exp(Math.log(1.14)/10 * curr) - 1) * Pop_curr[i] * 1.0465819687408728 * MR_curr[i] / 100000 * 1.025229357798165;
 
-      if (data.features[i].properties.TotalPM25 > max) {
+      if (data.features[i].properties.TotalPM25 > curr_max) {
         // console.log(data.features[i].properties.TotalPM25);
-        max = data.features[i].properties.TotalPM25;
+        curr_max = data.features[i].properties.TotalPM25;
         // console.log("max", max);
       }
     }
@@ -269,7 +255,7 @@ const Basemap = () => {
         ...options,
       })
     );
-
+    setActiveStep((prevActiveStep) => prevActiveStep + 1);
     setDisable(false);
   }
 
@@ -286,23 +272,22 @@ const Basemap = () => {
 
   const handleReset = async () => {
     setDisable(true);
-    for (let i = 0; i < 52411; i++) {
-      data.features[i].properties.TotalPM25 = 0;
-    }
     setEmission(50);
     setCounty(0);
-    setPercentage(0);
+    setActiveStep(0);
     setTotal(0.0);
     setPWAvg(0.0);
     setDeathsK(0.0);
     setDeathsL(0.0);
     id = id + "1";
+    data = simulations;
+    console.log("new data", data);
+    curr_max = ini_max;
     setLayer(
       new GeoJsonLayer({
         id,
         data,
         ...options,
-        getFillColor: [0, 0, 0, 0]
       })
     );
     console.log('done');
@@ -319,7 +304,7 @@ const Basemap = () => {
           id="counties-search-bar"
           // options={counties.features}
           options={counties.features.sort((a,b) => a.properties.NAME[0].localeCompare(b.properties.NAME[0]))}
-          sx={{ width: "210px" }}
+          sx={{ width: "210px" , ml: "3px", mt: "6px"}}
           onChange={handleCountyChange}
           getOptionLabel={(option) => option.properties.NAME}
           renderOption={(props, option) => {
@@ -346,7 +331,7 @@ const Basemap = () => {
         <Autocomplete
           id="choose-sectors"
           options={sectors}
-          sx={{ width: "300px" }}
+          sx={{ width: "300px" , ml: "3px", mt: "6px"}}
           display="inline"
           onChange={handleSectorChange}
           // getOptionLabel={(option) => option.properties.NAME}
@@ -372,7 +357,7 @@ const Basemap = () => {
           Define Emission Amount
         </Label>,
       content:
-        <Stack direction="row" spacing={0} alignItems="center" sx={{ml:2}}>
+        <Stack direction="row" spacing={0} alignItems="center" sx={{ml: "20px", mt: "8px", mb: "35px"}}>
           <Slider
             value={emission}
             onChange={handleEmissionChange}
@@ -411,9 +396,9 @@ const Basemap = () => {
       content:
       <Button
       variant="contained"
-      sx={{bgcolor: "#F44336"}}
+      sx={{bgcolor: "#F44336", mt: -5}}
       onClick={handleSubmit}
-      disabled={disable}
+      disabled={county===0 || sector===""}
       >
         Start
       </Button>
@@ -424,6 +409,7 @@ const Basemap = () => {
         </Label>,
       content:
         <Box>
+          <Typography variant="caption">Click on the question you are interested in.</Typography>
           <ResultBtn>How does this impact public health?</ResultBtn>
           {/* <ResultBtn>Where is the pollution coming from?</ResultBtn> */}
           <ResultBtn>Who is most affected?</ResultBtn>
@@ -431,19 +417,6 @@ const Basemap = () => {
     }
   ];
   
-  function getSafePercent(percent) {
-      return Math.min(100, Math.max(percent, 0));
-  }
-  function getStepPosition(steps, stepIndex) {
-      return (100 / (steps - 1)) * stepIndex;
-  }
-
-  function getStepComplete(currPercent, currStepIdx, totalSteps) {
-    const position = getStepPosition(totalSteps, currStepIdx);
-    const safePercent = getSafePercent(currPercent);
-    return position <= safePercent;
-  }
-
   return(
     <Box>
       {/* <ReactNotifications /> */}
@@ -478,91 +451,45 @@ const Basemap = () => {
               alignItems: 'flex-start',
             }}
           >
-            {/* <MyBox sx={{height: `${barHeight}px`, mb:"20%"}}>
-              <ProgressContainer>
-                <ProgressBar
-                    style={{
-                    height: Math.min(barHeight, progressBarHeight)
-                    }}
-                />
-              </ProgressContainer>
-              <StepsContainer>
-                {stepList.map((step, i, allSteps) => (
-                    <MyStep
-                    key={i}
-                    complete={getStepComplete(percentage, i, allSteps.length)}
-                    label={step.label}
-                    />
-                ))}
-              </StepsContainer>
-            </MyBox> */}
             <Stepper
               activeStep={activeStep} 
               orientation="vertical" 
               sx={{
-                "& .MuiStepConnector-line": {
-                  // borderTopWidth: "4px",
-                  borderLeft: "2.5px solid #7F99AE",
-                },
-                // "& .MuiStepConnector-root.Mui-active .MuiStepConnector-line": {
-                //   borderColor: "red",
-                // },
-                // "& .MuiStepConnector-root.Mui-completed .MuiStepConnector-line": {
-                //   borderColor: "green",
-                // },
                 "& .MuiStep-root": {
                   "& .MuiStepLabel-root": {
                     padding: 0,
-                    height: 17,
+                    height: 15,
                   },
                 },
-                "& .MuiStepConnector-root": {
-                  ml: "8px",
-                },
                 "& .MuiStepContent-root": {
-                  ml: "8px",
-                  borderLeft: "2.5px solid #7F99AE",
-                }
+                  ml: "7px",
+                  borderLeft: "3px solid #7F99AE",
+                },
+                "& .MuiStepConnector-line": {
+                  borderLeft: "3px solid #7F99AE",
+                },
+                "& .MuiStepConnector-root": {
+                  ml: "7px",
+                  height: 20,
+                },
+                "& .MuiStep-root:last-child .MuiStepContent-root": {
+                  borderLeft: "none",
+                },
               }}
             >
               {stepList.map((step, index) => (
                 <Step key={step.label} active={isMinimumScreens ? undefined : true}>
-                  <StepLabel
-                    StepIconComponent={CustomIcon}
-                    optional={
-                      index === 4 ? (
-                        <Typography variant="caption">Click on the question you are interested in.</Typography>
-                      ) : null
-                    }
-                  >
+                  <StepLabel StepIconComponent={CustomIcon}>
                     {step.label}
                   </StepLabel>
                   <StepContent>
                     <Typography>{step.content}</Typography>
-                    {/* <Box>
-                      <div>
-                        <Button
-                          variant="contained"
-                          onClick={handleNext}
-                          sx={{ mt: 1, mr: 1 }}
-                        >
-                          {index === stepList.length - 1 ? "Finish" : "Continue"}
-                        </Button>
-                        <Button
-                          disabled={index === 0}
-                          onClick={handleBack}
-                          sx={{ mt: 1, mr: 1 }}
-                        >
-                          Back
-                        </Button>
-                      </div>
-                    </Box> */}
                   </StepContent>
                 </Step>
               ))}
             </Stepper>
             <Stack spacing={2} direction="row" alignItems="center">
-              <WarningAmberIcon/>
+            <SentimentVerySatisfiedIcon/>
               <Slider
                 sx={{
                   width: 450,
@@ -571,9 +498,8 @@ const Basemap = () => {
                     color: "grey",
                     height: "15px",
                     borderRadius: 5,
-                    background: "linear-gradient(45deg, #f44336, #ffe7a6, #4caf50)",
-                    // background: "linear-gradient(45deg, #ffffff, #cc7c86, #15494e, #000000)",
-                    opacity: 1
+                    background: `linear-gradient(90deg, ${colorString})`,
+                    opacity: 150/256,
                   },
                   "& .MuiSlider-track": {
                     display: "none"
@@ -583,7 +509,7 @@ const Basemap = () => {
                   }
                 }}
               />
-              <SentimentVerySatisfiedIcon/>
+              <WarningAmberIcon/>
             </Stack>
             <Box>
               <IconButton><FileDownloadIcon/></IconButton>
