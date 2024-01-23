@@ -2,8 +2,8 @@
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).<br/>
 A preview of the website:
-<img width="1624" alt="Screen Shot" src="https://github.com/catttjyl/SenMap_web/assets/92762878/ced5b024-1d18-4b14-acaf-52c46df9a716">
-[Link to the website](https://senmap.netlify.app/)
+<img width="1624" alt="Screen Shot 2024-01-23 at 3 48 23 AM" src="https://github.com/catttjyl/SenMap_web/assets/92762878/09a5896d-aa0b-4ec3-9a93-d441c97d05ea">
+[Link to the website](https://manual-senmap.netlify.app/)
 
 ## Available Scripts
 

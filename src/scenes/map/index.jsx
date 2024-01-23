@@ -1,3 +1,4 @@
+import 'App.css';
 import React from "react";
 import DeckGL from "@deck.gl/react";
 import { GeoJsonLayer } from "@deck.gl/layers";
@@ -20,18 +21,21 @@ import {
   StepLabel,
   StepContent,
   Autocomplete,
-  StepConnector,
-  Grid
+  Grid,
+  Dialog,
+  DialogTitle,
+  DialogActions,
+  DialogContent,
 } from "@mui/material";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import SentimentVerySatisfiedIcon from '@mui/icons-material/SentimentVerySatisfied';
-import { MapProvider } from 'react-map-gl'
 import "mapbox-gl/dist/mapbox-gl.css";
-import pollutant from "data/pollutant.js";
 import simulations from "data/simulations.js";
 import { counties } from "data/counties.js";
+import { state_mapping } from "data/fips_state";
+import { sectors } from "data/sectors";
 import { county_index } from "data/county_indexn.js";
 import { getPolZarr, getSourceZarr } from "utils/getZarr.js";
 import { slice } from "zarr";
@@ -41,8 +45,7 @@ import { ReactNotifications, Store } from 'react-notifications-component'
 import 'react-notifications-component/dist/theme.css'
 import { DeckRenderer } from "deck.gl";
 import {FlexBetween, ResultBtn, Label} from "components/CompOvrd";
-import {MyBox, ProgressContainer, ProgressBar, StepsContainer, MyStep, ProgressStepper, CustomIcon} from "components/ProgressBar";
-import PercentIcon from '@mui/icons-material/Percent';
+import {CustomIcon} from "components/ProgressBar";
 
 const MAPBOX_ACCESS_TOKEN =
   "pk.eyJ1Ijoic2hhd25yYW4xODIiLCJhIjoiY2w5NXRvMDRjMmhhYzN3dDUyOGo0ZmdpeCJ9.RuSR6FInH2tUyctzdnilrw";
@@ -55,44 +58,28 @@ const INITIAL_VIEW_STATE = {
 	// pitch: 0,
 };
 
-// const MOBILE_INITIAL_VIEW_STATE = {
-//   latitude: 40.0,
-//   longitude: -98.0,
-//   zoom: 1,
-//   bearing: 0,
-// };
+const MOBILE_INITIAL_VIEW_STATE = {
+  latitude: 40.0,
+  longitude: -110.0,
+  zoom: 2.6,
+  bearing: 0,
+};
 
 const MAP_STYLE = "mapbox://styles/mapbox/streets-v10";
 
 let id = "id";
 let data = simulations;
-console.log("data", data);
-
-const sectors = [
-  "Agriculture", 
-  "Industrial", 
-  "Coal electric generation",
-  "Noncoal electric generation",
-  "Residential wood combustion",
-  "Residential gas combustion",
-  "Residential other",
-  "Road dust",
-  "Commercial cooking",
-  "Miscellaneous",
-  "Off-highway vehicles & equipments",
-  "Construction",
-  "Heavy duty diesel vehicles",
-  "Light duty gasoline vehicles",
-]
-// const percent = 0;
-// const steps = stepList;
+// console.log("data", data);
 
 const Basemap = () => {
   // const isNonMobileScreens = useMediaQuery("(min-width:1000px)");
-  const isMinimumScreens = useMediaQuery("(max-width:550px)");
+  const isMinimumScreens = useMediaQuery('(max-width:550px) or (max-height:550px)');
+  const [isPortrait, setIsPortrait] = React.useState(window.innerHeight > window.innerWidth);
+  const [initialViewState, setViewState] = React.useState(INITIAL_VIEW_STATE);
+  const [question1, setQuestion1] = React.useState(false);
   const [emission, setEmission] = React.useState(50);
   const [activeStep, setActiveStep] = React.useState(0);     //mui step test
-  const [county, setCounty] = React.useState(0);
+  const [geoID, setGeoID] = React.useState(0);
   const [sector, setSector] = React.useState("");
   const [location, setLocation] = React.useState(0);
   const [disable, setDisable] = React.useState(false);
@@ -107,7 +94,7 @@ const Basemap = () => {
   let ini_max = data.features.reduce((max, item) => findMax(item, max), 0);
   let curr_max = ini_max;
   var colorString = colors.join(', ');
-
+  console.log("isPortrati",isPortrait);
   const options = {
     pickable: true,
     stroked: false,
@@ -138,14 +125,40 @@ const Basemap = () => {
     })
   );
 
+  const handleClose = () => {
+    setIsPortrait(false);
+  };
+
+  const handleQ1Close = () => {
+    setQuestion1(false);
+  }
+  
+
   const handleCountyChange = (event, newValue) => {
-    // setCounty(event.target.value);
-    console.log("event",event.target);
-    console.log("newValue",newValue);
-    let code = newValue === null ? 0: newValue.properties.GEOID;
-    setCounty(code);
-    setLocation(county_index[code]);
-    // console.log("location", location);
+    if (newValue != null) {
+      let code = newValue.properties.GEOID;
+      let geometry = newValue.geometry.type;
+      let coor_num = 0;
+      let center = [];
+      if (geometry === "MultiPolygon") {
+        coor_num = newValue.geometry.coordinates[0][0].length;
+        center = newValue.geometry.coordinates[0][0][coor_num % 2];
+      } else {
+        coor_num = newValue.geometry.coordinates[0].length;
+        center = newValue.geometry.coordinates[0][coor_num % 2];
+      }
+      // console.log(newValue.geometry.coordinates[0][0].length);
+      setViewState({
+        latitude: center[1],
+        longitude: center[0]+0.01,
+        zoom: 10,
+        transitionDuration: 1000,
+      });
+      setGeoID(code);
+      setLocation(county_index[code]);
+      console.log("geoID",code);
+      console.log("location", county_index[code]);
+    }
     setActiveStep(1);
   };
 
@@ -193,6 +206,7 @@ const Basemap = () => {
       sector === "Off-highway vehicles & equipments" ? "Offroad":
       sector === "Construction" ? "Const":
       sector === "Heavy duty diesel vehicles" ? "Diesel_HD_Veh": "Gas_LD_Veh")
+    const PM25_cloud = await getPolZarr("PrimaryPM25");
     const Pop_could = await getPolZarr("TotalPop");
     // console.log("population", Pop_could);
     const MR_could = await getPolZarr("MortalityRate");
@@ -204,11 +218,14 @@ const Basemap = () => {
     // let pSO4_curr = await pSO4_cloud
     //   .get([0, location, slice(null, 52411)])
     //   .then(async (data) => await data.data);
-    console.log("county", county);
+    console.log("geoID", geoID);
     console.log("county_ind", location);
     console.log("sector", sector);
     let src_curr = await src_could
       .get([0, location, slice(null, 52411)])
+      .then(async (data) => await data.data);
+    let PM25_curr = await PM25_cloud
+      .get([0, location, slice(null, 52411),])
       .then(async (data) => await data.data);
     let Pop_curr = await Pop_could
       .get([slice(null, 52411),])
@@ -226,7 +243,7 @@ const Basemap = () => {
     console.log("emission", emission);
     for (let i = 0; i < 52411; i++) {
       let curr = emission * 2 / 100 * src_curr[i];
-      data.features[i].properties.TotalPM25 = curr;
+      data.features[i].properties.TotalPM25 += curr;
 
       tmpTotal += data.features[i].properties.TotalPM25;
       totalPop += Pop_curr[i];
@@ -267,18 +284,18 @@ const Basemap = () => {
     setActiveStep((prevActiveStep) => prevActiveStep - 1);
   };
 
-  
-
-
   const handleReset = async () => {
     setDisable(true);
-    setEmission(50);
-    setCounty(0);
     setActiveStep(0);
+    setEmission(50);
+    setGeoID(0);
+    setLocation(0);
+    setSector("");
     setTotal(0.0);
     setPWAvg(0.0);
     setDeathsK(0.0);
     setDeathsL(0.0);
+    setViewState(INITIAL_VIEW_STATE);
     id = id + "1";
     data = simulations;
     console.log("new data", data);
@@ -294,6 +311,9 @@ const Basemap = () => {
     setDisable(false);
   };
 
+
+  const selectedCounty = counties.features.find(feature => feature.properties.GEOID === geoID) || null;
+
   const stepList = [
     { label: 
         <Label>
@@ -302,25 +322,46 @@ const Basemap = () => {
       content:
         <Autocomplete
           id="counties-search-bar"
-          // options={counties.features}
-          options={counties.features.sort((a,b) => a.properties.NAME[0].localeCompare(b.properties.NAME[0]))}
+          value={selectedCounty}
+          options={counties.features.sort((a,b) => 
+            a.properties.STATEFP.localeCompare(b.properties.STATEFP) ||
+            a.properties.NAME[0].localeCompare(b.properties.NAME[0])
+            )
+          }
+          groupBy={(option) => option.properties.STATEFP}
           sx={{ width: "210px" , ml: "3px", mt: "6px"}}
           onChange={handleCountyChange}
           getOptionLabel={(option) => option.properties.NAME}
-          renderOption={(props, option) => {
-            return (
-              <li {...props} key={option.GEOID}>
-                {option.properties.NAME}
-              </li>
-            );
-          }}
-          renderInput={(feature) => 
+          renderInput={(params) => 
             <TextField 
-              {...feature}
+              {...params}
               label="Enter County..."
               variant="filled"
             />
           }
+          renderOption={(props, option) => {
+            return (
+              <li {...props} key={option.properties.GEOID}>
+                {option.properties.NAME}
+              </li>
+            );
+          }}
+          renderGroup={(param) => (
+            <li key={param.key}>
+              <Typography 
+                color="textSecondary" 
+                fontWeight="bold"
+                sx={{ top: -8,
+                padding: '4px 10px',
+                backgroundColor: "#D1F0E9", 
+                position: "sticky", 
+                zIndex: 2}}
+              >
+                {state_mapping[param.group]}
+              </Typography>
+              <Typography sx={{padding : 0}}>{param.children}</Typography>
+            </li>
+          )}
         />
     },
     { label: 
@@ -330,24 +371,15 @@ const Basemap = () => {
       content:
         <Autocomplete
           id="choose-sectors"
+          value={sector}
           options={sectors}
           sx={{ width: "300px" , ml: "3px", mt: "6px"}}
-          display="inline"
           onChange={handleSectorChange}
-          // getOptionLabel={(option) => option.properties.NAME}
-          // renderOption={(props, option) => {
-          //   return (
-          //     <li {...props} key={option.GEOID}>
-          //       {option.properties.NAME}
-          //     </li>
-          //   );
-          // }}
-          renderInput={(feature) => 
+          renderInput={(params) => 
             <TextField 
-              {...feature}
+              {...params}
               label="Choose a source..."
               variant="filled"
-              display="inline"
             />
           }
         />
@@ -398,7 +430,7 @@ const Basemap = () => {
       variant="contained"
       sx={{bgcolor: "#F44336", mt: -5}}
       onClick={handleSubmit}
-      disabled={county===0 || sector===""}
+      disabled={geoID===0 || sector===""}
       >
         Start
       </Button>
@@ -410,8 +442,7 @@ const Basemap = () => {
       content:
         <Box>
           <Typography variant="caption">Click on the question you are interested in.</Typography>
-          <ResultBtn>How does this impact public health?</ResultBtn>
-          {/* <ResultBtn>Where is the pollution coming from?</ResultBtn> */}
+          <ResultBtn onClick={() => setQuestion1(true)}>Where is the pollution coming from?</ResultBtn>
           <ResultBtn>Who is most affected?</ResultBtn>
         </Box>
     }
@@ -420,9 +451,53 @@ const Basemap = () => {
   return(
     <Box>
       {/* <ReactNotifications /> */}
+
+      {/* Rotate to landscape view */}
+      <Dialog
+        open={isPortrait}
+        onClose={handleClose}
+        aria-labelledby="alert-dialog-title"
+        aria-describedby="alert-dialog-description"
+      >
+        <DialogTitle id="alert-dialog-title">
+          {"Screen Orientation Alert"}
+        </DialogTitle>
+        <DialogContent>
+          <div className="phone-animation">
+            {/* <div className="arrow"/> */}
+          </div>
+          <p>For a better experience, please rotate your device to landscape mode.</p>        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClose}>OK</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Interpret data */}
+      <Dialog
+        open={question1}
+        onClose={handleQ1Close}
+        sx={{ 
+          '& .MuiDialog-paper': { // Apply custom styles
+            minWidth: '1200px', // Minimum width of the dialog
+            minHeight: '700px', // Maximum height of the dialog
+          }
+        }}
+      >
+        <DialogTitle id="alert-dialog-title">
+          {"How does this impact public health?"}
+        </DialogTitle>
+        <DialogContent>
+          show the result here.
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleQ1Close}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Map and everything */}
         <Box>
           <DeckGL
-            initialViewState = {INITIAL_VIEW_STATE}
+            initialViewState = {isMinimumScreens ? MOBILE_INITIAL_VIEW_STATE : initialViewState}
             getTooltip={({ object }) =>
               object && 
                   (object.properties.TotalPM25).toPrecision(3)
@@ -491,9 +566,11 @@ const Basemap = () => {
             <Stack spacing={2} direction="row" alignItems="center">
             <SentimentVerySatisfiedIcon/>
               <Slider
+                defaultValue={37.5}
+                disabled
+                marks={[{value: 37.5, label: "AQS Standard"}]}
                 sx={{
                   width: 450,
-                  display: "block",
                   "& .MuiSlider-rail": {
                     color: "grey",
                     height: "15px",
@@ -505,7 +582,14 @@ const Basemap = () => {
                     display: "none"
                   },
                   "& .MuiSlider-thumb": {
-                    display: "none"
+                    width: 0,
+                    height: "3.5vh",
+                    backgroundColor: 'transparent',
+                    border: 'none',
+                    borderLeft: "10px solid transparent",
+                    borderRight: "10px solid transparent",
+                    borderRadius: "0px",
+                    borderBottom: "15px solid #00FF00",
                   }
                 }}
               />

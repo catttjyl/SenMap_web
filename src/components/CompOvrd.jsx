@@ -11,11 +11,6 @@ export const FlexBetween = styled(Box)({
   alignItems: "center",
 });
   
-// export const AnswerBtn = styled(Button)({
-//     display: "inline",
-//     variant: "contained",
-// });
-  
 export const ResultBtn = (props) => (
   <Button
     // style={{justifyContent: "flex-start"}}
@@ -27,6 +22,7 @@ export const ResultBtn = (props) => (
       borderRadius: 5,
       mt: "0.5rem",
     }}
+    onClick={props.onClick}
   >
       <Typography color="black" fontSize={15}>{props.children}</Typography>
   </Button>
