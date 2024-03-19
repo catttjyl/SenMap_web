@@ -12,6 +12,7 @@ const Navbar = () => {
     isMobileScreens ? 
     <Box sx={{position: "relative"}}>
       <FlexBetween padding="1rem 3%">
+        <img width="60" height="60" src={icon} alt="NASA-logo"/>
         <FlexBetween>
           <Typography
             fontSize="2rem"

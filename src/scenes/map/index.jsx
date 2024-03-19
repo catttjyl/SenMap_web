@@ -26,8 +26,10 @@ import {
   DialogTitle,
   DialogActions,
   DialogContent,
+  CircularProgress
 } from "@mui/material";
 import useMediaQuery from "@mui/material/useMediaQuery";
+import WebMercatorViewport from '@math.gl/web-mercator';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import SentimentVerySatisfiedIcon from '@mui/icons-material/SentimentVerySatisfied';
@@ -36,7 +38,7 @@ import simulations from "data/simulations.js";
 import { counties } from "data/counties.js";
 import { state_mapping } from "data/fips_state";
 import { sectors } from "data/sectors";
-import { county_index } from "data/county_indexn.js";
+import { county_index } from "data/county_index.js";
 import { getPolZarr, getSourceZarr } from "utils/getZarr.js";
 import { slice } from "zarr";
 import { hexToRgba } from "utils/legend.js";
@@ -46,6 +48,7 @@ import 'react-notifications-component/dist/theme.css'
 import { DeckRenderer } from "deck.gl";
 import {FlexBetween, ResultBtn, Label} from "components/CompOvrd";
 import {CustomIcon} from "components/ProgressBar";
+import bbox from '@turf/bbox';
 
 const MAPBOX_ACCESS_TOKEN =
   "pk.eyJ1Ijoic2hhd25yYW4xODIiLCJhIjoiY2w5NXRvMDRjMmhhYzN3dDUyOGo0ZmdpeCJ9.RuSR6FInH2tUyctzdnilrw";
@@ -73,29 +76,69 @@ let data = simulations;
 
 const Basemap = () => {
   // const isNonMobileScreens = useMediaQuery("(min-width:1000px)");
-  const isMinimumScreens = useMediaQuery('(max-width:550px) or (max-height:550px)');
+  const isMobileScreens = useMediaQuery('(max-width:550px) or (max-height:550px)');
   const [isPortrait, setIsPortrait] = React.useState(window.innerHeight > window.innerWidth);
   const [initialViewState, setViewState] = React.useState(INITIAL_VIEW_STATE);
   const [question1, setQuestion1] = React.useState(false);
+  const [question2, setQuestion2] = React.useState(false);
   const [emission, setEmission] = React.useState(50);
   const [activeStep, setActiveStep] = React.useState(0);     //mui step test
   const [geoID, setGeoID] = React.useState(0);
   const [sector, setSector] = React.useState("");
   const [location, setLocation] = React.useState(0);
+  const [selectedCounty, setSelectedCounty] = React.useState(null);
   const [disable, setDisable] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
   const [total, setTotal] = React.useState(0.0);    // Total concentration of PM2.5
-  const [PWAvg, setPWAvg] = React.useState(0.0);    // Population-weighted Average concentration of PM2.5
+  const [PWAvg, setPWAvg] = React.useState([0, null]);    // Population-weighted Average concentration of PM2.5
   const [deathsK, setDeathsK] = React.useState(0.0);    // Total number of deaths
   const [deathsL, setDeathsL] = React.useState(0.0);    // Assume a 14% increase in morality rate for every 10 μg/m³ increase in PM2.5 concentration (instead of 6%)
-  let max = 0;
-  const findMax = (data, max) => {
-    return data.properties.TotalPM25 > max ? data.properties.TotalPM25 : max;
-  };
-  let ini_max = data.features.reduce((max, item) => findMax(item, max), 0);
-  let curr_max = ini_max;
+  const [Asian, setAsian] = React.useState([0, null]);
+  const [Black, setBlack] = React.useState([0, null]);
+  const [Latino, setLatino] = React.useState([0, null]);
+  const [Native, setNative] = React.useState([0, null]);
+  const mapRef = React.useRef(null);
+
+  const [layerOpacity, setLayerOpacity] = React.useState(0); // Start with 0 opacity
+
+  React.useEffect(() => {
+    // Start the fade-in effect immediately
+    let opacity = 0;
+    const interval = 10; // milliseconds
+    const totalDuration = 3000; // 1 second
+    const steps = totalDuration / interval;
+    const opacityIncrement = 255 / steps; // Assuming opacity range is 0-255
+
+    const fadeInOut = () => {
+      if (opacity < 150) {
+        // Fade in
+        opacity += opacityIncrement;
+      } else if (opacity >= 0) {
+        // Fade out
+        opacity -= opacityIncrement;
+      }
+      setLayerOpacity(opacity);
+
+      if (opacity <= 0) {
+        clearInterval(intervalId);
+      }
+    };
+
+    const intervalId = setInterval(fadeInOut, interval);
+
+    return () => clearInterval(intervalId);
+  }, []);
+
+  let max = 20;
+  let standard = 9/max;
+  // const findMax = (data, max) => {
+  //   return data.properties.TotalPM25 > max ? data.properties.TotalPM25 : max;
+  // };
+  // let ini_max = data.features.reduce((max, item) => findMax(item, max), 0);
   var colorString = colors.join(', ');
   console.log("isPortrati",isPortrait);
-  const options = {
+
+  const options1 = {
     pickable: true,
     stroked: false,
     filled: true,
@@ -105,12 +148,31 @@ const Basemap = () => {
     lineWidthMinPixels: 2,
     getFillColor: (data) => {
       // let opacity = data.properties.TotalPM25 === 0 ? 0 : 150;
-      let index = Math.round(data.properties.TotalPM25/curr_max * 255);
-      let opacity = index === 0 ? 0 : 150;
+      let pm25 = data.properties.TotalPM25;
+      let index = pm25 >= max ? 255 : Math.round(pm25/max * 255);
       let color = hexToRgba(colors[index], 150);
     
       return color;
     },
+    getLineColor: [0, 0, 255, 200],
+    getPointRadius: 100,
+    getLineWidth: 5,
+    getElevation: 30,
+    getTooltip: ({ object }) =>
+      object && {
+        text: (object.properties.TotalPM25).toPrecision(10)
+      },
+  };
+
+  const options2 = {
+    pickable: true,
+    stroked: false,
+    filled: true,
+    extruded: true,
+    pointType: "circle",
+    lineWidthScale: 20,
+    lineWidthMinPixels: 2,
+    getFillColor: [255, 255, 255, 150],
     getLineColor: [0, 0, 255, 200],
     getPointRadius: 100,
     getLineWidth: 5,
@@ -121,7 +183,15 @@ const Basemap = () => {
     new GeoJsonLayer({
       id,
       data,
-      ...options,
+      ...options1,
+    })
+  );
+
+  const [zoomInLayer, setZoomInLayer] = React.useState(
+    new GeoJsonLayer({
+      id,
+      selectedCounty,
+      ...options2,
     })
   );
 
@@ -132,29 +202,47 @@ const Basemap = () => {
   const handleQ1Close = () => {
     setQuestion1(false);
   }
+
+  const handleQ2Close = () => {
+    setQuestion2(false);
+  }
   
 
   const handleCountyChange = (event, newValue) => {
     if (newValue != null) {
+      console.log("countychange newValue", newValue);
       let code = newValue.properties.GEOID;
-      let geometry = newValue.geometry.type;
-      let coor_num = 0;
-      let center = [];
-      if (geometry === "MultiPolygon") {
-        coor_num = newValue.geometry.coordinates[0][0].length;
-        center = newValue.geometry.coordinates[0][0][coor_num % 2];
-      } else {
-        coor_num = newValue.geometry.coordinates[0].length;
-        center = newValue.geometry.coordinates[0][coor_num % 2];
-      }
-      // console.log(newValue.geometry.coordinates[0][0].length);
+      let countyinfo = counties.features.find(feature => feature.properties.GEOID === code);
+      const bounds = bbox(newValue);
+      let [minLng, minLat, maxLng, maxLat] = bounds;
+      console.log("bbox",minLng, minLat, maxLng, maxLat);
+      const { offsetHeight: mapHeight, offsetWidth: mapWidth } = mapRef.current.getMap().getContainer()
+      minLng = minLng - 0.05;
+      maxLng = maxLng - 0.05;
+      console.log("map wh",mapRef.current);
+      console.log("wh",mapWidth,mapHeight);
+      let padding = 20;
+      if (padding * 2 > mapWidth || padding * 2 > mapHeight) padding = 0
+      const {longitude, latitude, zoom} = new WebMercatorViewport({width: mapWidth, height: mapHeight}).fitBounds([[minLng, minLat], [maxLng, maxLat]], {padding});
+      console.log(padding);
       setViewState({
-        latitude: center[1],
-        longitude: center[0]+0.01,
-        zoom: 10,
+        latitude: latitude,
+        longitude: longitude,
+        zoom: zoom,
         transitionDuration: 1000,
       });
+      setZoomInLayer(
+        new GeoJsonLayer({
+          id,
+          data: {
+            "type":"FeatureCollection",
+            "features":[countyinfo]
+          },
+          ...options2
+        })
+      );
       setGeoID(code);
+      setSelectedCounty(countyinfo);
       setLocation(county_index[code]);
       console.log("geoID",code);
       console.log("location", county_index[code]);
@@ -187,11 +275,9 @@ const Basemap = () => {
   };
 
   const handleSubmit = async () => {
+    setLoading(true);
     setActiveStep(4);
     setDisable(true);
-    // const pNO3_cloud = await getPolZarr("pNO3");
-    // const pSO4_cloud = await getPolZarr("pSO4");
-    // console.log("NOx", NOx_cloud);
     const src_could = await getSourceZarr(
       sector === "Agriculture" ? "Ag": 
       sector === "Industrial" ? "Industrial":
@@ -206,26 +292,20 @@ const Basemap = () => {
       sector === "Off-highway vehicles & equipments" ? "Offroad":
       sector === "Construction" ? "Const":
       sector === "Heavy duty diesel vehicles" ? "Diesel_HD_Veh": "Gas_LD_Veh")
-    const PM25_cloud = await getPolZarr("PrimaryPM25");
     const Pop_could = await getPolZarr("TotalPop");
     // console.log("population", Pop_could);
     const MR_could = await getPolZarr("MortalityRate");
     // console.log("death", MR_could);
+    const Asian_cloud = await getPolZarr("Asian");
+    const Black_cloud = await getPolZarr("Black");
+    const Latino_cloud = await getPolZarr("Latino");
+    const Native_cloud = await getPolZarr("Native");
 
-    // let pNO3_curr = await pNO3_cloud
-    //   .get([0, location, slice(null, 52411)])
-    //   .then(async (data) => await data.data);
-    // let pSO4_curr = await pSO4_cloud
-    //   .get([0, location, slice(null, 52411)])
-    //   .then(async (data) => await data.data);
     console.log("geoID", geoID);
     console.log("county_ind", location);
     console.log("sector", sector);
     let src_curr = await src_could
       .get([0, location, slice(null, 52411)])
-      .then(async (data) => await data.data);
-    let PM25_curr = await PM25_cloud
-      .get([0, location, slice(null, 52411),])
       .then(async (data) => await data.data);
     let Pop_curr = await Pop_could
       .get([slice(null, 52411),])
@@ -234,45 +314,75 @@ const Basemap = () => {
       .get([slice(null, 52411),])
       .then(async (data) => await data.data);
     // console.log("death", MR_curr);
+    let Asian_curr = await Asian_cloud
+      .get([slice(null, 52411),])
+      .then(async (data) => await data.data);
+    let Black_curr = await Black_cloud
+      .get([slice(null, 52411),])
+      .then(async (data) => await data.data);
+    let Latino_curr = await Latino_cloud
+      .get([slice(null, 52411),])
+      .then(async (data) => await data.data);
+    let Native_curr = await Native_cloud
+      .get([slice(null, 52411),])
+      .then(async (data) => await data.data);
 
     let tmpTotal = 0;
     let weightedSum = 0;
     let totalPop = 0;
     let tmpDsk = 0;
     let tmpDsL = 0;
+    let weightedSumA = 0;
+    let totalAsian = 0;
+    let weightedSumB = 0;
+    let totalBlack = 0;
+    let weightedSumL = 0;
+    let totalLati = 0;
+    let weightedSumN = 0;
+    let totalNative = 0;
     console.log("emission", emission);
     for (let i = 0; i < 52411; i++) {
-      let curr = emission * 2 / 100 * src_curr[i];
-      data.features[i].properties.TotalPM25 += curr;
+      let src_emis = (emission * 2 / 100 - 1) * src_curr[i];
+      data.features[i].properties.TotalPM25 += src_emis;
 
       tmpTotal += data.features[i].properties.TotalPM25;
-      totalPop += Pop_curr[i];
       // console.log("population/grid: " + Pop_curr[i]);
       weightedSum += data.features[i].properties.TotalPM25 * Pop_curr[i];
-      tmpDsk += (Math.exp(Math.log(1.06)/10 * curr) - 1) * Pop_curr[i] * 1.0465819687408728 * MR_curr[i] / 100000 * 1.025229357798165;
-      tmpDsL += (Math.exp(Math.log(1.14)/10 * curr) - 1) * Pop_curr[i] * 1.0465819687408728 * MR_curr[i] / 100000 * 1.025229357798165;
+      totalPop += Pop_curr[i];
+      weightedSumA += data.features[i].properties.TotalPM25 * Asian_curr[i];
+      totalAsian += Asian_curr[i];
+      weightedSumB += data.features[i].properties.TotalPM25 * Black_curr[i];
+      totalBlack += Black_curr[i];
+      weightedSumL += data.features[i].properties.TotalPM25 * Latino_curr[i];
+      totalLati += Latino_curr[i];
+      weightedSumN += data.features[i].properties.TotalPM25 * Native_curr[i];
+      totalNative += Native_curr[i];
+      // tmpDsk += (Math.exp(Math.log(1.06)/10 * curr) - 1) * Pop_curr[i] * 1.0465819687408728 * MR_curr[i] / 100000 * 1.025229357798165;
+      // tmpDsL += (Math.exp(Math.log(1.14)/10 * curr) - 1) * Pop_curr[i] * 1.0465819687408728 * MR_curr[i] / 100000 * 1.025229357798165;
 
-      if (data.features[i].properties.TotalPM25 > curr_max) {
-        // console.log(data.features[i].properties.TotalPM25);
-        curr_max = data.features[i].properties.TotalPM25;
-        // console.log("max", max);
-      }
+
     }
     setTotal(total+tmpTotal);
-    setPWAvg(weightedSum/totalPop);
+    setPWAvg([weightedSum/totalPop, PWAvg[0]]);
     setDeathsK(deathsK+tmpDsk);
     setDeathsL(deathsL+tmpDsL);
+    setAsian([weightedSumA/totalAsian, Asian[0]]);
+    setBlack([weightedSumB/totalBlack, Black[0]]);
+    setLatino([weightedSumL/totalLati, Latino[0]]);
+    setNative([weightedSumN/totalNative, Native[0]]);
     console.log("population sum",totalPop)
-    id = id + "1";
+    id = id + 1;
     console.log(id);
     setLayer(
       new GeoJsonLayer({
         id,
         data,
-        ...options,
+        ...options1,
       })
     );
     setActiveStep((prevActiveStep) => prevActiveStep + 1);
+    setLoading(false);
+    console.log("whether button disabled", disable);
     setDisable(false);
   }
 
@@ -291,28 +401,29 @@ const Basemap = () => {
     setGeoID(0);
     setLocation(0);
     setSector("");
+    setSelectedCounty(null);
     setTotal(0.0);
-    setPWAvg(0.0);
+    setPWAvg([0,null]);
+    setAsian([0,null]);
+    setBlack([0,null]);
+    setLatino([0,null]);
+    setNative([0,null]);
     setDeathsK(0.0);
     setDeathsL(0.0);
     setViewState(INITIAL_VIEW_STATE);
     id = id + "1";
     data = simulations;
     console.log("new data", data);
-    curr_max = ini_max;
     setLayer(
       new GeoJsonLayer({
         id,
         data,
-        ...options,
+        ...options1,
       })
     );
     console.log('done');
     setDisable(false);
   };
-
-
-  const selectedCounty = counties.features.find(feature => feature.properties.GEOID === geoID) || null;
 
   const stepList = [
     { label: 
@@ -426,14 +537,27 @@ const Basemap = () => {
     },
     { label: null,
       content:
-      <Button
-      variant="contained"
-      sx={{bgcolor: "#F44336", mt: -5}}
-      onClick={handleSubmit}
-      disabled={geoID===0 || sector===""}
-      >
-        Start
-      </Button>
+      <Box>
+        <Button
+        variant="contained"
+        sx={{bgcolor: "#F44336", mt: -5}}
+        onClick={handleSubmit}
+        disabled={disable || geoID===0 || sector===""}
+        >
+          Start
+        </Button>
+        {loading && (
+          <CircularProgress
+            size={24}
+            sx={{
+              color: "green",
+              position: 'absolute',
+              mt: "-5%",
+              ml: "-15%"
+            }}
+          />
+        )}
+      </Box>
     },
     { label: 
         <Label>
@@ -442,8 +566,8 @@ const Basemap = () => {
       content:
         <Box>
           <Typography variant="caption">Click on the question you are interested in.</Typography>
-          <ResultBtn onClick={() => setQuestion1(true)}>Where is the pollution coming from?</ResultBtn>
-          <ResultBtn>Who is most affected?</ResultBtn>
+          <ResultBtn onClick={() => setQuestion1(true)}>How does this impact public health?</ResultBtn>
+          <ResultBtn onClick={() => setQuestion2(true)}>Who is most affected?</ResultBtn>
         </Box>
     }
   ];
@@ -494,19 +618,42 @@ const Basemap = () => {
         </DialogActions>
       </Dialog>
 
+      <Dialog
+        open={question2}
+        onClose={handleQ2Close}
+        sx={{ 
+          '& .MuiDialog-paper': { // Apply custom styles
+            minWidth: '1200px', // Minimum width of the dialog
+            minHeight: '700px', // Maximum height of the dialog
+          }
+        }}
+      >
+        <DialogTitle id="alert-dialog-title">
+          {"How does this impact public health?"}
+        </DialogTitle>
+        <DialogContent dividers>
+          <h4 style={{lineHeight:"0"}}>Population-Weighted average PM2.5 by racial group </h4>
+          ▪ All population: {PWAvg[0].toPrecision(4)} {PWAvg[1] !== null && ` --> ${PWAvg[1].toPrecision(4)}`} μg/m³<br/>
+          ▪ Asian: {Asian[0].toPrecision(4)} {Asian[1] !== null && ` --> ${Asian[1].toPrecision(4)}`} μg/m³<br/>
+          ▪ Black: {Black[0].toPrecision(4)} {Black[1] !== null && ` --> ${Black[1].toPrecision(4)}`} μg/m³<br/>
+          ▪ Latino: {Latino[0].toPrecision(4)} {Latino[1] !== null && ` --> ${Latino[1].toPrecision(4)}`} μg/m³<br/>
+          ▪ Native: {Native[0].toPrecision(4)} {Native[1] !== null && ` --> ${Native[1].toPrecision(4)}`} μg/m³<br/>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleQ2Close}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Map and everything */}
         <Box>
           <DeckGL
-            initialViewState = {isMinimumScreens ? MOBILE_INITIAL_VIEW_STATE : initialViewState}
-            getTooltip={({ object }) =>
-              object && 
-                  (object.properties.TotalPM25).toPrecision(3)
-            }
+            initialViewState = {isMobileScreens ? MOBILE_INITIAL_VIEW_STATE : initialViewState}
             controller = {true}
-            layers = {[layer]}
-            MapProvider
+            layers = {[layer, zoomInLayer]}
+            // MapProvider
           >
             <Map
+              ref={mapRef}
               mapStyle={MAP_STYLE}
               mapboxAccessToken={MAPBOX_ACCESS_TOKEN}
             >
@@ -553,7 +700,7 @@ const Basemap = () => {
               }}
             >
               {stepList.map((step, index) => (
-                <Step key={step.label} active={isMinimumScreens ? undefined : true}>
+                <Step key={step.label} active={isMobileScreens ? undefined : true}>
                   <StepLabel StepIconComponent={CustomIcon}>
                     {step.label}
                   </StepLabel>
@@ -564,11 +711,11 @@ const Basemap = () => {
               ))}
             </Stepper>
             <Stack spacing={2} direction="row" alignItems="center">
-            <SentimentVerySatisfiedIcon/>
+              <SentimentVerySatisfiedIcon/>
               <Slider
-                defaultValue={37.5}
+                defaultValue={45}
                 disabled
-                marks={[{value: 37.5, label: "AQS Standard"}]}
+                marks={[{value: 45, label: "AQS Standard"}]}
                 sx={{
                   width: 450,
                   "& .MuiSlider-rail": {
@@ -582,7 +729,6 @@ const Basemap = () => {
                     display: "none"
                   },
                   "& .MuiSlider-thumb": {
-                    width: 0,
                     height: "3.5vh",
                     backgroundColor: 'transparent',
                     border: 'none',
