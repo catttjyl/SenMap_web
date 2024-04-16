@@ -2,15 +2,12 @@ import 'App.css';
 import React from "react";
 import DeckGL from "@deck.gl/react";
 import { GeoJsonLayer } from "@deck.gl/layers";
-import { Map, Marker, Popup } from "react-map-gl";
+import { Map } from "react-map-gl";
 import Navbar from "../navbar";
 import {
   Box,
   TextField,
-  FormControl,
-  MenuItem,
   Input,
-  Select,
   Button,
   IconButton,
   Slider,
@@ -21,7 +18,6 @@ import {
   StepLabel,
   StepContent,
   Autocomplete,
-  Grid,
   Dialog,
   DialogTitle,
   DialogActions,
@@ -35,7 +31,8 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import SentimentVerySatisfiedIcon from '@mui/icons-material/SentimentVerySatisfied';
 import "mapbox-gl/dist/mapbox-gl.css";
 import simulations from "data/simulations.js";
-import { counties } from "data/counties.js";
+// import { counties } from "data/counties.js";
+import { counties } from "data/test_classify.js";
 import { state_mapping } from "data/fips_state";
 import { sectors } from "data/sectors";
 import { county_index } from "data/county_index.js";
@@ -99,38 +96,19 @@ const Basemap = () => {
   const [Native, setNative] = React.useState([0, null]);
   const mapRef = React.useRef(null);
 
-  const [layerOpacity, setLayerOpacity] = React.useState(0); // Start with 0 opacity
+  const [countyTotal, setCountyTotal] = React.useState(0.0);
+  const [countyPWAvg, setCountyPWAvg] = React.useState([0, null]);
+  const [countyDeathsK, setCountyDeathsK] = React.useState(0.0);
+  const [countyAsian, setCountyAsian] = React.useState([0, null]);
+  const [countyBlack, setCountyBlack] = React.useState([0, null]);
+  const [countyLatino, setCountyLatino] = React.useState([0, null]);
+  const [countyNative, setCountyNative] = React.useState([0, null]);
 
-  React.useEffect(() => {
-    // Start the fade-in effect immediately
-    let opacity = 0;
-    const interval = 10; // milliseconds
-    const totalDuration = 3000; // 1 second
-    const steps = totalDuration / interval;
-    const opacityIncrement = 255 / steps; // Assuming opacity range is 0-255
-
-    const fadeInOut = () => {
-      if (opacity < 150) {
-        // Fade in
-        opacity += opacityIncrement;
-      } else if (opacity >= 0) {
-        // Fade out
-        opacity -= opacityIncrement;
-      }
-      setLayerOpacity(opacity);
-
-      if (opacity <= 0) {
-        clearInterval(intervalId);
-      }
-    };
-
-    const intervalId = setInterval(fadeInOut, interval);
-
-    return () => clearInterval(intervalId);
-  }, []);
+  const [intakeFrac, setIntakeFrac] = React.useState([0, null]);
 
   let max = 20;
-  let standard = 9/max;
+  let epa_standard = 9/max;
+  let breath_rate = 15.4 * 0.5; //breath/ppl/min X liter/breath
   // const findMax = (data, max) => {
   //   return data.properties.TotalPM25 > max ? data.properties.TotalPM25 : max;
   // };
@@ -140,12 +118,7 @@ const Basemap = () => {
 
   const options1 = {
     pickable: true,
-    stroked: false,
     filled: true,
-    extruded: true,
-    pointType: "circle",
-    lineWidthScale: 20,
-    lineWidthMinPixels: 2,
     getFillColor: (data) => {
       // let opacity = data.properties.TotalPM25 === 0 ? 0 : 150;
       let pm25 = data.properties.TotalPM25;
@@ -153,30 +126,14 @@ const Basemap = () => {
       let color = hexToRgba(colors[index], 150);
     
       return color;
-    },
-    getLineColor: [0, 0, 255, 200],
-    getPointRadius: 100,
-    getLineWidth: 5,
-    getElevation: 30,
-    getTooltip: ({ object }) =>
-      object && {
-        text: (object.properties.TotalPM25).toPrecision(10)
-      },
+    }
   };
 
+  const [layerOpacity, setLayerOpacity] = React.useState(200);
   const options2 = {
-    pickable: true,
-    stroked: false,
+    pickable: false,
     filled: true,
-    extruded: true,
-    pointType: "circle",
-    lineWidthScale: 20,
-    lineWidthMinPixels: 2,
-    getFillColor: [255, 255, 255, 150],
-    getLineColor: [0, 0, 255, 200],
-    getPointRadius: 100,
-    getLineWidth: 5,
-    getElevation: 30,
+    getFillColor: [255, 255, 255, layerOpacity],
   };
 
   const [layer, setLayer] = React.useState(
@@ -190,10 +147,41 @@ const Basemap = () => {
   const [zoomInLayer, setZoomInLayer] = React.useState(
     new GeoJsonLayer({
       id,
-      selectedCounty,
       ...options2,
     })
   );
+
+  React.useEffect(() => {
+    const intervalTime = 50;
+    const duration = 2500;
+    const steps = duration / intervalTime;
+    const opacityDecrease = 200 / steps;
+
+    const interval = setInterval(() => {
+      console.log("layer opacity",layerOpacity);
+      setLayerOpacity(prevOpacity => {
+        const newOpacity = prevOpacity - opacityDecrease;
+        if (newOpacity <= 0) {
+          clearInterval(interval);
+          return 0;
+        }
+        return newOpacity;
+      });
+    }, intervalTime);
+
+    return () => clearInterval(interval);
+  }, [selectedCounty]);
+
+  React.useEffect(() => {
+    setZoomInLayer(new GeoJsonLayer({
+      id: 'zoomInLayer',
+      data: selectedCounty ? {
+        "type": "FeatureCollection",
+        "features": [selectedCounty]
+      } : null,
+      ...options2,
+    }));
+  }, [selectedCounty, layerOpacity]); 
 
   const handleClose = () => {
     setIsPortrait(false);
@@ -207,7 +195,6 @@ const Basemap = () => {
     setQuestion2(false);
   }
   
-
   const handleCountyChange = (event, newValue) => {
     if (newValue != null) {
       console.log("countychange newValue", newValue);
@@ -231,21 +218,24 @@ const Basemap = () => {
         zoom: zoom,
         transitionDuration: 1000,
       });
-      setZoomInLayer(
-        new GeoJsonLayer({
-          id,
-          data: {
-            "type":"FeatureCollection",
-            "features":[countyinfo]
-          },
-          ...options2
-        })
-      );
+      setLayerOpacity(255);
+      // setZoomInLayer(
+      //   new GeoJsonLayer({
+      //     id,
+      //     data: {
+      //       "type":"FeatureCollection",
+      //       "features":[countyinfo]
+      //     },
+      //     opacity: layerOpacity,
+      //     ...options2
+      //   })
+      // );
       setGeoID(code);
       setSelectedCounty(countyinfo);
       setLocation(county_index[code]);
       console.log("geoID",code);
       console.log("location", county_index[code]);
+      console.log("SelectedCounty",countyinfo.properties.area_frac)
     }
     setActiveStep(1);
   };
@@ -344,28 +334,65 @@ const Basemap = () => {
     for (let i = 0; i < 52411; i++) {
       let src_emis = (emission * 2 / 100 - 1) * src_curr[i];
       data.features[i].properties.TotalPM25 += src_emis;
-
+      let curr = data.features[i].properties.TotalPM25
       tmpTotal += data.features[i].properties.TotalPM25;
       // console.log("population/grid: " + Pop_curr[i]);
-      weightedSum += data.features[i].properties.TotalPM25 * Pop_curr[i];
+      weightedSum += curr * Pop_curr[i];
       totalPop += Pop_curr[i];
-      weightedSumA += data.features[i].properties.TotalPM25 * Asian_curr[i];
+      weightedSumA += curr * Asian_curr[i];
       totalAsian += Asian_curr[i];
-      weightedSumB += data.features[i].properties.TotalPM25 * Black_curr[i];
+      weightedSumB += curr * Black_curr[i];
       totalBlack += Black_curr[i];
-      weightedSumL += data.features[i].properties.TotalPM25 * Latino_curr[i];
+      weightedSumL += curr * Latino_curr[i];
       totalLati += Latino_curr[i];
-      weightedSumN += data.features[i].properties.TotalPM25 * Native_curr[i];
+      weightedSumN += curr * Native_curr[i];
       totalNative += Native_curr[i];
-      // tmpDsk += (Math.exp(Math.log(1.06)/10 * curr) - 1) * Pop_curr[i] * 1.0465819687408728 * MR_curr[i] / 100000 * 1.025229357798165;
+      tmpDsk += (Math.exp(Math.log(1.06)/10 * curr) - 1) * Pop_curr[i] * 1.0465819687408728 * MR_curr[i] / 100000 * 1.025229357798165;
       // tmpDsL += (Math.exp(Math.log(1.14)/10 * curr) - 1) * Pop_curr[i] * 1.0465819687408728 * MR_curr[i] / 100000 * 1.025229357798165;
-
-
     }
-    setTotal(total+tmpTotal);
+
+    let countyTmpTotal = 0;
+    let countyPol = 0;
+    let countyWeightedSum = 0;
+    let countyWeightedSumA = 0;
+    let countyTotalAsian = 0;
+    let countyWeightedSumB = 0;
+    let countyTotalBlack = 0;
+    let countyWeightedSumL = 0;
+    let countyTotalLati = 0;
+    let countyWeightedSumN = 0;
+    let countyTotalNative = 0;
+    let countyDsk = 0;
+    let dict = selectedCounty.properties.area_frac;
+    for (var key in dict) {
+      let curr = data.features[key].properties.TotalPM25 * dict[key];
+      let pop = Pop_curr[key] * dict[key];
+      countyTmpTotal += curr;
+      countyWeightedSum += curr * pop;
+      countyPol += pop;
+      countyWeightedSumA += curr * Asian_curr[key] * dict[key];
+      countyTotalAsian += Asian_curr[key];
+      countyWeightedSumB += curr * Black_curr[key] * dict[key];
+      countyTotalBlack += Black_curr[key];
+      countyWeightedSumL += curr * Latino_curr[key] * dict[key];
+      countyTotalLati += Latino_curr[key];
+      countyWeightedSumN += curr * Native_curr[key] * dict[key];
+      countyTotalNative += Native_curr[key];
+      countyDsk += (Math.exp(Math.log(1.06)/10 * curr) - 1) * pop * 1.0465819687408728 * MR_curr[key] * dict[key] / 100000 * 1.025229357798165;
+    }
+    let intakeMass = breath_rate * countyPol * 365 * 24 * 60
+    setCountyTotal(countyPol);
+    setCountyPWAvg([countyWeightedSum/countyPol, countyPWAvg[0]]);
+    setCountyDeathsK(countyDsk);
+    setCountyAsian([countyWeightedSumA/countyTotalAsian, countyAsian[0]]);
+    setCountyBlack([countyWeightedSumB/countyTotalBlack, countyBlack[0]]);
+    setCountyLatino([countyWeightedSumL/countyTotalLati, countyLatino[0]]);
+    setCountyNative([countyWeightedSumN/countyTotalNative, countyNative[0]]);
+    
+    setTotal(tmpTotal);
     setPWAvg([weightedSum/totalPop, PWAvg[0]]);
-    setDeathsK(deathsK+tmpDsk);
-    setDeathsL(deathsL+tmpDsL);
+    setDeathsK(tmpDsk);
+    // setDeathsL(tmpDsL);
     setAsian([weightedSumA/totalAsian, Asian[0]]);
     setBlack([weightedSumB/totalBlack, Black[0]]);
     setLatino([weightedSumL/totalLati, Latino[0]]);
@@ -648,6 +675,10 @@ const Basemap = () => {
         <Box>
           <DeckGL
             initialViewState = {isMobileScreens ? MOBILE_INITIAL_VIEW_STATE : initialViewState}
+            getTooltip={({ object }) =>
+              object && 
+                  (object.properties.TotalPM25).toPrecision(3)
+            }
             controller = {true}
             layers = {[layer, zoomInLayer]}
             // MapProvider
@@ -656,12 +687,11 @@ const Basemap = () => {
               ref={mapRef}
               mapStyle={MAP_STYLE}
               mapboxAccessToken={MAPBOX_ACCESS_TOKEN}
-            >
-            </Map>
+            />
           </DeckGL>
           <Navbar/>
           <Box
-            flexDirection="column"      //not sure if this works
+            flexDirection="column"
             sx={{
               left: "3%",
               top: "100px",
@@ -750,6 +780,26 @@ const Basemap = () => {
               </Button>
             </Box>
           </Box>
+          {selectedCounty && <Box
+            sx={{
+              position: 'fixed',
+              bottom: 20,
+              right: 20,
+            }}
+          >
+            <h4 style={{lineHeight:"0"}}>Info for {selectedCounty.properties.NAME}</h4>
+            ▪ Total population: {countyTotal.toPrecision(4)} ppl<br/>
+            ▪ Number of Death: {countyDeathsK} ppl<br/>
+            {/* ▪ Asian:<br/>
+            ▪ Black:<br/>
+            ▪ Latino:<br/>
+            ▪ Native:<br/> */}
+            ▪ Population-weighted: {countyPWAvg[1] !== null && `${countyPWAvg[1].toPrecision(4)}  --> `} {countyPWAvg[0].toPrecision(4)} μg/m³<br/>
+            ▪ Asian-weighted: {countyAsian[1] !== null && `${countyAsian[1].toPrecision(4)} --> `} {countyAsian[0].toPrecision(4)} μg/m³<br/>
+            ▪ Black-weighted: {countyBlack[1] !== null && `${countyBlack[1].toPrecision(4)} --> `} {countyBlack[0].toPrecision(4)} μg/m³<br/>
+            ▪ Latino-weighted: {countyLatino[1] !== null && `${countyLatino[1].toPrecision(4)} --> `} {countyLatino[0].toPrecision(4)} μg/m³<br/>
+            ▪ Native-weighted: {countyNative[1] !== null && `${countyNative[1].toPrecision(4)} --> `} {countyNative[0].toPrecision(4)} μg/m³<br/>
+          </Box>}
         </Box>
     </Box>
   );
