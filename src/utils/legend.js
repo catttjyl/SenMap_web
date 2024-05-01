@@ -43,3 +43,13 @@ export function rgbaToHex(r, g, b, a) {
 
   return "#" + outParts.join("");
 }
+
+export function formatNumber(input) {
+  if (input >= 1e6) {
+    let millionTmp = (input / 1e6).toFixed(3)
+    return `${millionTmp} million`
+  } else if (input >= 1000) {
+    return parseInt(input).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+  return input.toFixed(1)
+}

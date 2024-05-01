@@ -1,5 +1,5 @@
 import 'App.css';
-import React from "react";
+import React, { useState, useEffect, useRef } from "react";
 import DeckGL from "@deck.gl/react";
 import { GeoJsonLayer } from "@deck.gl/layers";
 import { Map } from "react-map-gl";
@@ -32,19 +32,17 @@ import SentimentVerySatisfiedIcon from '@mui/icons-material/SentimentVerySatisfi
 import "mapbox-gl/dist/mapbox-gl.css";
 import simulations from "data/simulations.js";
 // import { counties } from "data/counties.js";
-import { counties } from "data/test_classify.js";
+import { counties } from "data/classify.js";
 import { state_mapping } from "data/fips_state";
 import { sectors } from "data/sectors";
 import { county_index } from "data/county_index.js";
 import { getPolZarr, getSourceZarr } from "utils/getZarr.js";
 import { slice } from "zarr";
-import { hexToRgba } from "utils/legend.js";
+import { hexToRgba, formatNumber } from "utils/legend.js";
 import { colors } from "utils/colors.js";
-import { ReactNotifications, Store } from 'react-notifications-component'
 import 'react-notifications-component/dist/theme.css'
-import { DeckRenderer } from "deck.gl";
-import {FlexBetween, ResultBtn, Label} from "components/CompOvrd";
-import {CustomIcon} from "components/ProgressBar";
+import { ResultBtn, Label } from "components/CompOvrd";
+import { CustomIcon } from "components/ProgressBar";
 import bbox from '@turf/bbox';
 
 const MAPBOX_ACCESS_TOKEN =
@@ -72,43 +70,48 @@ let data = simulations;
 // console.log("data", data);
 
 const Basemap = () => {
+  const mapRef = useRef(null);
   // const isNonMobileScreens = useMediaQuery("(min-width:1000px)");
   const isMobileScreens = useMediaQuery('(max-width:550px) or (max-height:550px)');
-  const [isPortrait, setIsPortrait] = React.useState(window.innerHeight > window.innerWidth);
-  const [initialViewState, setViewState] = React.useState(INITIAL_VIEW_STATE);
-  const [question1, setQuestion1] = React.useState(false);
-  const [question2, setQuestion2] = React.useState(false);
-  const [emission, setEmission] = React.useState(50);
-  const [activeStep, setActiveStep] = React.useState(0);     //mui step test
-  const [geoID, setGeoID] = React.useState(0);
-  const [sector, setSector] = React.useState("");
-  const [location, setLocation] = React.useState(0);
-  const [selectedCounty, setSelectedCounty] = React.useState(null);
-  const [disable, setDisable] = React.useState(false);
-  const [loading, setLoading] = React.useState(false);
-  const [total, setTotal] = React.useState(0.0);    // Total concentration of PM2.5
-  const [PWAvg, setPWAvg] = React.useState([0, null]);    // Population-weighted Average concentration of PM2.5
-  const [deathsK, setDeathsK] = React.useState(0.0);    // Total number of deaths
-  const [deathsL, setDeathsL] = React.useState(0.0);    // Assume a 14% increase in morality rate for every 10 μg/m³ increase in PM2.5 concentration (instead of 6%)
-  const [Asian, setAsian] = React.useState([0, null]);
-  const [Black, setBlack] = React.useState([0, null]);
-  const [Latino, setLatino] = React.useState([0, null]);
-  const [Native, setNative] = React.useState([0, null]);
-  const mapRef = React.useRef(null);
+  const [isPortrait, setIsPortrait] = useState(window.innerHeight > window.innerWidth);
+  const [initialViewState, setViewState] = useState(INITIAL_VIEW_STATE);
+  const [openQ1, setOpenQ1] = useState(false);
+  const [openQ2, setOpenQ2] = useState(false);
+  const [emission, setEmission] = useState(50);
+  const [activeStep, setActiveStep] = useState(0);     //mui step test
+  const [geoID, setGeoID] = useState(0);
+  const [sector, setSector] = useState("");
+  const [location, setLocation] = useState(0);
+  const [selectedCounty, setSelectedCounty] = useState(null);
+  const [disable, setDisable] = useState(false);
+  const [loading, setLoading] = useState(false);
+  
+  const [Pop_curr, setPop_curr] = useState(null);
+  const [MR_curr, setMR_curr] = useState(null);
+  const [Asian_curr, setAsian_curr] = useState(null);
+  const [Black_curr, setBlack_curr] = useState(null);
+  const [Latino_curr, setLatino_curr] = useState(null);
+  const [Native_curr, setNative_curr] = useState(null);
 
-  const [countyTotal, setCountyTotal] = React.useState(0.0);
-  const [countyPWAvg, setCountyPWAvg] = React.useState([0, null]);
-  const [countyDeathsK, setCountyDeathsK] = React.useState(0.0);
-  const [countyAsian, setCountyAsian] = React.useState([0, null]);
-  const [countyBlack, setCountyBlack] = React.useState([0, null]);
-  const [countyLatino, setCountyLatino] = React.useState([0, null]);
-  const [countyNative, setCountyNative] = React.useState([0, null]);
+  const [total, setTotal] = useState(0.0);    // Total concentration of PM2.5
+  const [PWAvg, setPWAvg] = useState([0, null]);    // Population-weighted Average concentration of PM2.5
+  const [deathsK, setDeathsK] = useState(0.0);    // Total number of deaths
+  const [deathsL, setDeathsL] = useState(0.0);    // Assume a 14% increase in morality rate for every 10 μg/m³ increase in PM2.5 concentration (instead of 6%)
+  const [Asian, setAsian] = useState([0, null]);
+  const [Black, setBlack] = useState([0, null]);
+  const [Latino, setLatino] = useState([0, null]);
+  const [Native, setNative] = useState([0, null]);
 
-  const [intakeFrac, setIntakeFrac] = React.useState([0, null]);
+  const [countyTotal, setCountyTotal] = useState(0.0);
+  const [countyPWAvg, setCountyPWAvg] = useState([0, null]);
+  const [countyDeathsK, setCountyDeathsK] = useState([0, null]);
+  const [countyAsian, setCountyAsian] = useState([0, null]);
+  const [countyBlack, setCountyBlack] = useState([0, null]);
+  const [countyLatino, setCountyLatino] = useState([0, null]);
+  const [countyNative, setCountyNative] = useState([0, null]);
 
   let max = 20;
   let epa_standard = 9/max;
-  let breath_rate = 15.4 * 0.5; //breath/ppl/min X liter/breath
   // const findMax = (data, max) => {
   //   return data.properties.TotalPM25 > max ? data.properties.TotalPM25 : max;
   // };
@@ -129,14 +132,14 @@ const Basemap = () => {
     }
   };
 
-  const [layerOpacity, setLayerOpacity] = React.useState(200);
+  const [layerOpacity, setLayerOpacity] = useState(200);
   const options2 = {
     pickable: false,
     filled: true,
     getFillColor: [255, 255, 255, layerOpacity],
   };
 
-  const [layer, setLayer] = React.useState(
+  const [layer, setLayer] = useState(
     new GeoJsonLayer({
       id,
       data,
@@ -144,35 +147,39 @@ const Basemap = () => {
     })
   );
 
-  const [zoomInLayer, setZoomInLayer] = React.useState(
+  const [zoomInLayer, setZoomInLayer] = useState(
     new GeoJsonLayer({
       id,
       ...options2,
     })
   );
 
-  React.useEffect(() => {
-    const intervalTime = 50;
-    const duration = 2500;
-    const steps = duration / intervalTime;
-    const opacityDecrease = 200 / steps;
+ useEffect(() => {
+    if (selectedCounty) {
+      console.log("opacity update");
+      handleCountyMetrics(1);
+      const intervalTime = 50;
+      const duration = 2500;
+      const steps = duration / intervalTime;
+      const opacityDecrease = layerOpacity / steps;
 
-    const interval = setInterval(() => {
-      console.log("layer opacity",layerOpacity);
-      setLayerOpacity(prevOpacity => {
-        const newOpacity = prevOpacity - opacityDecrease;
-        if (newOpacity <= 0) {
-          clearInterval(interval);
-          return 0;
-        }
-        return newOpacity;
-      });
-    }, intervalTime);
+      const interval = setInterval(() => {
+        console.log("layer opacity",layerOpacity);
+        setLayerOpacity(prevOpacity => {
+          const newOpacity = prevOpacity - opacityDecrease;
+          if (newOpacity <= 0) {
+            clearInterval(interval);
+            return 0;
+          }
+          return newOpacity;
+        });
+      }, intervalTime);
 
-    return () => clearInterval(interval);
+      return () => clearInterval(interval);
+    }
   }, [selectedCounty]);
 
-  React.useEffect(() => {
+ useEffect(() => {
     setZoomInLayer(new GeoJsonLayer({
       id: 'zoomInLayer',
       data: selectedCounty ? {
@@ -181,20 +188,153 @@ const Basemap = () => {
       } : null,
       ...options2,
     }));
-  }, [selectedCounty, layerOpacity]); 
+  }, [layerOpacity]); 
 
   const handleClose = () => {
     setIsPortrait(false);
   };
 
   const handleQ1Close = () => {
-    setQuestion1(false);
+    setOpenQ1(false);
   }
 
   const handleQ2Close = () => {
-    setQuestion2(false);
+    setOpenQ2(false);
   }
   
+  useEffect(() => {
+    const fetchZarrData = async () => {
+      const results = await Promise.all([
+        getPolZarr("TotalPop"),
+        getPolZarr("MortalityRate"),
+        getPolZarr("Asian"),
+        getPolZarr("Black"),
+        getPolZarr("Latino"),
+        getPolZarr("Native")
+      ]);
+
+      const zarrData = await Promise.all(results.map((result, index) =>
+        result.get([slice(null, 52411),]).then(async (res) => await res.data)
+      ));
+      console.log("popreach",zarrData);
+      await Promise.all([
+        setPop_curr(zarrData[0]),
+        setMR_curr(zarrData[1]),
+        setAsian_curr(zarrData[2]),
+        setBlack_curr(zarrData[3]),
+        setLatino_curr(zarrData[4]),
+        setNative_curr(zarrData[5])
+      ]);
+    };
+    fetchZarrData();
+  }, []);
+
+  useEffect(() => {
+    if (Pop_curr) {
+      handleUSMetrics(1);
+    }
+  },[Pop_curr]);
+
+  const handleUSMetrics = (index) => {
+    // const Pop_could = await getPolZarr("TotalPop");
+    // const MR_could = await getPolZarr("MortalityRate");
+    // const Asian_cloud = await getPolZarr("Asian");
+    // const Black_cloud = await getPolZarr("Black");
+    // const Latino_cloud = await getPolZarr("Latino");
+    // const Native_cloud = await getPolZarr("Native");
+
+    // let Pop_curr = await Pop_could
+    //   .get([slice(null, 52411),])
+    //   .then(async (data) => await data.data);
+    // let MR_curr = await MR_could
+    //   .get([slice(null, 52411),])
+    //   .then(async (data) => await data.data);
+    // // console.log("death", MR_curr);
+    // let Asian_curr = await Asian_cloud
+    //   .get([slice(null, 52411),])
+    //   .then(async (data) => await data.data);
+    // let Black_curr = await Black_cloud
+    //   .get([slice(null, 52411),])
+    //   .then(async (data) => await data.data);
+    // let Latino_curr = await Latino_cloud
+    //   .get([slice(null, 52411),])
+    //   .then(async (data) => await data.data);
+    // let Native_curr = await Native_cloud
+    //   .get([slice(null, 52411),])
+    //   .then(async (data) => await data.data);
+
+    console.log("Pop_curr",Pop_curr);
+    let tmpTotal = 0;
+    let tmpDsk = 0;
+    let totalPop = 0, totalAsian = 0, totalBlack = 0, totalLati = 0, totalNative = 0;
+    let weightedSum = 0, weightedSumA = 0, weightedSumB = 0, weightedSumL = 0, weightedSumN = 0;
+    console.log("emission", emission);
+    for (let i = 0; i < 52411; i++) {
+      let curr = data.features[i].properties.TotalPM25
+      tmpTotal += curr;
+      // console.log("population/grid: " + Pop_curr[i]);
+      weightedSum += curr * Pop_curr[i];
+      totalPop += Pop_curr[i];
+      weightedSumA += curr * Asian_curr[i];
+      totalAsian += Asian_curr[i];
+      weightedSumB += curr * Black_curr[i];
+      totalBlack += Black_curr[i];
+      weightedSumL += curr * Latino_curr[i];
+      totalLati += Latino_curr[i];
+      weightedSumN += curr * Native_curr[i];
+      totalNative += Native_curr[i];
+      tmpDsk += (Math.exp(Math.log(1.06)/10 * curr) - 1) * Pop_curr[i] * 1.0465819687408728 * MR_curr[i] / 100000 * 1.025229357798165;
+    }
+
+    setTotal(tmpTotal);
+    setDeathsK(tmpDsk);
+    setPWAvg([weightedSum/totalPop, PWAvg[index]]);
+    setAsian([weightedSumA/totalAsian, Asian[index]]);
+    setBlack([weightedSumB/totalBlack, Black[index]]);
+    setLatino([weightedSumL/totalLati, Latino[index]]);
+    setNative([weightedSumN/totalNative, Native[index]]);
+    console.log("population sum",totalPop)
+  }
+
+  const handleCountyMetrics = (index) => {
+    let countyTmpTotal = 0;
+    let countyPol = 0;
+    let countyWeightedSum = 0;
+    let countyWeightedSumA = 0;
+    let countyTotalAsian = 0;
+    let countyWeightedSumB = 0;
+    let countyTotalBlack = 0;
+    let countyWeightedSumL = 0;
+    let countyTotalLati = 0;
+    let countyWeightedSumN = 0;
+    let countyTotalNative = 0;
+    let countyDsk = 0;
+    let dict = selectedCounty.properties.area_frac;
+    for (var key in dict) {
+      let curr = data.features[key].properties.TotalPM25 * dict[key];
+      let pop = Pop_curr[key] * dict[key];
+      countyTmpTotal += curr;
+      countyWeightedSum += curr * pop;
+      countyPol += pop;
+      countyWeightedSumA += curr * Asian_curr[key] * dict[key];
+      countyTotalAsian += Asian_curr[key];
+      countyWeightedSumB += curr * Black_curr[key] * dict[key];
+      countyTotalBlack += Black_curr[key];
+      countyWeightedSumL += curr * Latino_curr[key] * dict[key];
+      countyTotalLati += Latino_curr[key];
+      countyWeightedSumN += curr * Native_curr[key] * dict[key];
+      countyTotalNative += Native_curr[key];
+      countyDsk += (Math.exp(Math.log(1.06)/10 * curr) - 1) * pop * 1.0465819687408728 * MR_curr[key] * dict[key] / 100000 * 1.025229357798165;
+    }
+    setCountyTotal(countyPol);
+    setCountyDeathsK([countyDsk, countyDeathsK[index]]);
+    setCountyPWAvg([countyWeightedSum/countyPol, countyPWAvg[index]]);
+    setCountyAsian([countyWeightedSumA/countyTotalAsian, countyAsian[index]]);
+    setCountyBlack([countyWeightedSumB/countyTotalBlack, countyBlack[index]]);
+    setCountyLatino([countyWeightedSumL/countyTotalLati, countyLatino[index]]);
+    setCountyNative([countyWeightedSumN/countyTotalNative, countyNative[index]]);
+  }
+
   const handleCountyChange = (event, newValue) => {
     if (newValue != null) {
       console.log("countychange newValue", newValue);
@@ -219,17 +359,6 @@ const Basemap = () => {
         transitionDuration: 1000,
       });
       setLayerOpacity(255);
-      // setZoomInLayer(
-      //   new GeoJsonLayer({
-      //     id,
-      //     data: {
-      //       "type":"FeatureCollection",
-      //       "features":[countyinfo]
-      //     },
-      //     opacity: layerOpacity,
-      //     ...options2
-      //   })
-      // );
       setGeoID(code);
       setSelectedCounty(countyinfo);
       setLocation(county_index[code]);
@@ -282,122 +411,20 @@ const Basemap = () => {
       sector === "Off-highway vehicles & equipments" ? "Offroad":
       sector === "Construction" ? "Const":
       sector === "Heavy duty diesel vehicles" ? "Diesel_HD_Veh": "Gas_LD_Veh")
-    const Pop_could = await getPolZarr("TotalPop");
-    // console.log("population", Pop_could);
-    const MR_could = await getPolZarr("MortalityRate");
-    // console.log("death", MR_could);
-    const Asian_cloud = await getPolZarr("Asian");
-    const Black_cloud = await getPolZarr("Black");
-    const Latino_cloud = await getPolZarr("Latino");
-    const Native_cloud = await getPolZarr("Native");
-
+    
     console.log("geoID", geoID);
     console.log("county_ind", location);
     console.log("sector", sector);
     let src_curr = await src_could
       .get([0, location, slice(null, 52411)])
       .then(async (data) => await data.data);
-    let Pop_curr = await Pop_could
-      .get([slice(null, 52411),])
-      .then(async (data) => await data.data);
-    let MR_curr = await MR_could
-      .get([slice(null, 52411),])
-      .then(async (data) => await data.data);
-    // console.log("death", MR_curr);
-    let Asian_curr = await Asian_cloud
-      .get([slice(null, 52411),])
-      .then(async (data) => await data.data);
-    let Black_curr = await Black_cloud
-      .get([slice(null, 52411),])
-      .then(async (data) => await data.data);
-    let Latino_curr = await Latino_cloud
-      .get([slice(null, 52411),])
-      .then(async (data) => await data.data);
-    let Native_curr = await Native_cloud
-      .get([slice(null, 52411),])
-      .then(async (data) => await data.data);
-
-    let tmpTotal = 0;
-    let weightedSum = 0;
-    let totalPop = 0;
-    let tmpDsk = 0;
-    let tmpDsL = 0;
-    let weightedSumA = 0;
-    let totalAsian = 0;
-    let weightedSumB = 0;
-    let totalBlack = 0;
-    let weightedSumL = 0;
-    let totalLati = 0;
-    let weightedSumN = 0;
-    let totalNative = 0;
-    console.log("emission", emission);
+    
     for (let i = 0; i < 52411; i++) {
       let src_emis = (emission * 2 / 100 - 1) * src_curr[i];
       data.features[i].properties.TotalPM25 += src_emis;
-      let curr = data.features[i].properties.TotalPM25
-      tmpTotal += data.features[i].properties.TotalPM25;
-      // console.log("population/grid: " + Pop_curr[i]);
-      weightedSum += curr * Pop_curr[i];
-      totalPop += Pop_curr[i];
-      weightedSumA += curr * Asian_curr[i];
-      totalAsian += Asian_curr[i];
-      weightedSumB += curr * Black_curr[i];
-      totalBlack += Black_curr[i];
-      weightedSumL += curr * Latino_curr[i];
-      totalLati += Latino_curr[i];
-      weightedSumN += curr * Native_curr[i];
-      totalNative += Native_curr[i];
-      tmpDsk += (Math.exp(Math.log(1.06)/10 * curr) - 1) * Pop_curr[i] * 1.0465819687408728 * MR_curr[i] / 100000 * 1.025229357798165;
-      // tmpDsL += (Math.exp(Math.log(1.14)/10 * curr) - 1) * Pop_curr[i] * 1.0465819687408728 * MR_curr[i] / 100000 * 1.025229357798165;
     }
-
-    let countyTmpTotal = 0;
-    let countyPol = 0;
-    let countyWeightedSum = 0;
-    let countyWeightedSumA = 0;
-    let countyTotalAsian = 0;
-    let countyWeightedSumB = 0;
-    let countyTotalBlack = 0;
-    let countyWeightedSumL = 0;
-    let countyTotalLati = 0;
-    let countyWeightedSumN = 0;
-    let countyTotalNative = 0;
-    let countyDsk = 0;
-    let dict = selectedCounty.properties.area_frac;
-    for (var key in dict) {
-      let curr = data.features[key].properties.TotalPM25 * dict[key];
-      let pop = Pop_curr[key] * dict[key];
-      countyTmpTotal += curr;
-      countyWeightedSum += curr * pop;
-      countyPol += pop;
-      countyWeightedSumA += curr * Asian_curr[key] * dict[key];
-      countyTotalAsian += Asian_curr[key];
-      countyWeightedSumB += curr * Black_curr[key] * dict[key];
-      countyTotalBlack += Black_curr[key];
-      countyWeightedSumL += curr * Latino_curr[key] * dict[key];
-      countyTotalLati += Latino_curr[key];
-      countyWeightedSumN += curr * Native_curr[key] * dict[key];
-      countyTotalNative += Native_curr[key];
-      countyDsk += (Math.exp(Math.log(1.06)/10 * curr) - 1) * pop * 1.0465819687408728 * MR_curr[key] * dict[key] / 100000 * 1.025229357798165;
-    }
-    let intakeMass = breath_rate * countyPol * 365 * 24 * 60
-    setCountyTotal(countyPol);
-    setCountyPWAvg([countyWeightedSum/countyPol, countyPWAvg[0]]);
-    setCountyDeathsK(countyDsk);
-    setCountyAsian([countyWeightedSumA/countyTotalAsian, countyAsian[0]]);
-    setCountyBlack([countyWeightedSumB/countyTotalBlack, countyBlack[0]]);
-    setCountyLatino([countyWeightedSumL/countyTotalLati, countyLatino[0]]);
-    setCountyNative([countyWeightedSumN/countyTotalNative, countyNative[0]]);
-    
-    setTotal(tmpTotal);
-    setPWAvg([weightedSum/totalPop, PWAvg[0]]);
-    setDeathsK(tmpDsk);
-    // setDeathsL(tmpDsL);
-    setAsian([weightedSumA/totalAsian, Asian[0]]);
-    setBlack([weightedSumB/totalBlack, Black[0]]);
-    setLatino([weightedSumL/totalLati, Latino[0]]);
-    setNative([weightedSumN/totalNative, Native[0]]);
-    console.log("population sum",totalPop)
+    handleUSMetrics(0);
+    handleCountyMetrics(0);
     id = id + 1;
     console.log(id);
     setLayer(
@@ -412,14 +439,6 @@ const Basemap = () => {
     console.log("whether button disabled", disable);
     setDisable(false);
   }
-
-  const handleNext = () => {
-    setActiveStep((prevActiveStep) => prevActiveStep + 1);
-  };
-
-  const handleBack = () => {
-    setActiveStep((prevActiveStep) => prevActiveStep - 1);
-  };
 
   const handleReset = async () => {
     setDisable(true);
@@ -460,7 +479,7 @@ const Basemap = () => {
       content:
         <Autocomplete
           id="counties-search-bar"
-          value={selectedCounty}
+          // value={selectedCounty}
           options={counties.features.sort((a,b) => 
             a.properties.STATEFP.localeCompare(b.properties.STATEFP) ||
             a.properties.NAME[0].localeCompare(b.properties.NAME[0])
@@ -509,7 +528,7 @@ const Basemap = () => {
       content:
         <Autocomplete
           id="choose-sectors"
-          value={sector}
+          // value={sector}
           options={sectors}
           sx={{ width: "300px" , ml: "3px", mt: "6px"}}
           onChange={handleSectorChange}
@@ -566,10 +585,10 @@ const Basemap = () => {
       content:
       <Box>
         <Button
-        variant="contained"
-        sx={{bgcolor: "#F44336", mt: -5}}
-        onClick={handleSubmit}
-        disabled={disable || geoID===0 || sector===""}
+          variant="contained"
+          sx={{bgcolor: "#F44336", mt: -5}}
+          onClick={handleSubmit}
+          disabled={disable || geoID===0 || sector===""}
         >
           Start
         </Button>
@@ -593,8 +612,8 @@ const Basemap = () => {
       content:
         <Box>
           <Typography variant="caption">Click on the question you are interested in.</Typography>
-          <ResultBtn onClick={() => setQuestion1(true)}>How does this impact public health?</ResultBtn>
-          <ResultBtn onClick={() => setQuestion2(true)}>Who is most affected?</ResultBtn>
+          <ResultBtn onClick={() => setOpenQ1(true)}>How does this impact public health?</ResultBtn>
+          <ResultBtn onClick={() => setOpenQ2(true)}>Who is most affected?</ResultBtn>
         </Box>
     }
   ];
@@ -625,7 +644,7 @@ const Basemap = () => {
 
       {/* Interpret data */}
       <Dialog
-        open={question1}
+        open={openQ1}
         onClose={handleQ1Close}
         sx={{ 
           '& .MuiDialog-paper': { // Apply custom styles
@@ -646,7 +665,7 @@ const Basemap = () => {
       </Dialog>
 
       <Dialog
-        open={question2}
+        open={openQ2}
         onClose={handleQ2Close}
         sx={{ 
           '& .MuiDialog-paper': { // Apply custom styles
@@ -788,8 +807,8 @@ const Basemap = () => {
             }}
           >
             <h4 style={{lineHeight:"0"}}>Info for {selectedCounty.properties.NAME}</h4>
-            ▪ Total population: {countyTotal.toPrecision(4)} ppl<br/>
-            ▪ Number of Death: {countyDeathsK} ppl<br/>
+            ▪ Total population: {formatNumber(countyTotal)} ppl<br/>
+            ▪ Number of Death: {countyDeathsK[1] !== null && `${formatNumber(countyDeathsK[1])}  --> `} {formatNumber(countyDeathsK[0])} ppl<br/>
             {/* ▪ Asian:<br/>
             ▪ Black:<br/>
             ▪ Latino:<br/>
