@@ -13,7 +13,6 @@ import {
   Slider,
   Typography,
   Stack,
-  Stepper,
   Step,
   StepLabel,
   StepContent,
@@ -40,9 +39,10 @@ import { getPolZarr, getSourceZarr } from "utils/getZarr.js";
 import { slice } from "zarr";
 import { hexToRgba, formatNumber } from "utils/legend.js";
 import { colors } from "utils/colors.js";
-import 'react-notifications-component/dist/theme.css'
-import { ResultBtn, Label } from "components/CompOvrd";
-import { CustomIcon } from "components/ProgressBar";
+import 'react-notifications-component/dist/theme.css';
+import InterpreteData from "components/DataInterpret";
+import { Label } from "components/CompOvrd";
+import { CustomIcon, CustomStepper } from "components/ProgressBar";
 import bbox from '@turf/bbox';
 
 const MAPBOX_ACCESS_TOKEN =
@@ -65,8 +65,8 @@ const MOBILE_INITIAL_VIEW_STATE = {
 
 const MAP_STYLE = "mapbox://styles/mapbox/streets-v10";
 
-let id = "id";
-let data = simulations;
+var id = "id";
+var data = simulations;
 // console.log("data", data);
 
 const Basemap = () => {
@@ -75,8 +75,6 @@ const Basemap = () => {
   const isMobileScreens = useMediaQuery('(max-width:550px) or (max-height:550px)');
   const [isPortrait, setIsPortrait] = useState(window.innerHeight > window.innerWidth);
   const [initialViewState, setViewState] = useState(INITIAL_VIEW_STATE);
-  const [openQ1, setOpenQ1] = useState(false);
-  const [openQ2, setOpenQ2] = useState(false);
   const [emission, setEmission] = useState(50);
   const [activeStep, setActiveStep] = useState(0);     //mui step test
   const [geoID, setGeoID] = useState(0);
@@ -92,23 +90,56 @@ const Basemap = () => {
   const [Black_curr, setBlack_curr] = useState(null);
   const [Latino_curr, setLatino_curr] = useState(null);
   const [Native_curr, setNative_curr] = useState(null);
+  const [White_curr, setWhite_curr] = useState(null);
 
   const [total, setTotal] = useState(0.0);    // Total concentration of PM2.5
-  const [PWAvg, setPWAvg] = useState([0, null]);    // Population-weighted Average concentration of PM2.5
-  const [deathsK, setDeathsK] = useState(0.0);    // Total number of deaths
-  const [deathsL, setDeathsL] = useState(0.0);    // Assume a 14% increase in morality rate for every 10 μg/m³ increase in PM2.5 concentration (instead of 6%)
-  const [Asian, setAsian] = useState([0, null]);
-  const [Black, setBlack] = useState([0, null]);
-  const [Latino, setLatino] = useState([0, null]);
-  const [Native, setNative] = useState([0, null]);
+  const [PWAvg, setPWAvg] = useState([0.0, null]);    // Population-weighted Average concentration of PM2.5
+  const [deathsK, setDeathsK] = useState([0.0, null]);    // Total number of deaths
+  // const [deathsL, setDeathsL] = useState(0.0);    // Assume a 14% increase in morality rate for every 10 μg/m³ increase in PM2.5 concentration (instead of 6%)
+  const [Asian, setAsian] = useState({
+    ppl: 0.0,
+    conc: [0.0, null]
+  });
+  const [Black, setBlack] = useState({
+    ppl: 0.0,
+    conc: [0.0, null]
+  });
+  const [Latino, setLatino] = useState({
+    ppl: 0.0,
+    conc: [0.0, null]
+  });
+  const [Native, setNative] = useState({
+    ppl: 0.0,
+    conc: [0.0, null]
+  });
+  const [White, setWhite] = useState({
+    ppl: 0.0,
+    conc: [0.0, null]
+  });
 
   const [countyTotal, setCountyTotal] = useState(0.0);
-  const [countyPWAvg, setCountyPWAvg] = useState([0, null]);
-  const [countyDeathsK, setCountyDeathsK] = useState([0, null]);
-  const [countyAsian, setCountyAsian] = useState([0, null]);
-  const [countyBlack, setCountyBlack] = useState([0, null]);
-  const [countyLatino, setCountyLatino] = useState([0, null]);
-  const [countyNative, setCountyNative] = useState([0, null]);
+  const [countyPWAvg, setCountyPWAvg] = useState([0.0, null]);
+  const [countyDeathsK, setCountyDeathsK] = useState([0.0, null]);
+  const [countyAsian, setCountyAsian] = useState({
+    ppl: 0.0,
+    conc: [0.0, null]
+  });
+  const [countyBlack, setCountyBlack] = useState({
+    ppl: 0.0,
+    conc: [0.0, null]
+  });
+  const [countyLatino, setCountyLatino] = useState({
+    ppl: 0.0,
+    conc: [0.0, null]
+  });
+  const [countyNative, setCountyNative] = useState({
+    ppl: 0.0,
+    conc: [0.0, null]
+  });
+  const [countyWhite, setCountyWhite] = useState({
+    ppl: 0.0,
+    conc: [0.0, null]
+  });
 
   let max = 20;
   let epa_standard = 9/max;
@@ -193,14 +224,6 @@ const Basemap = () => {
   const handleClose = () => {
     setIsPortrait(false);
   };
-
-  const handleQ1Close = () => {
-    setOpenQ1(false);
-  }
-
-  const handleQ2Close = () => {
-    setOpenQ2(false);
-  }
   
   useEffect(() => {
     const fetchZarrData = async () => {
@@ -210,7 +233,8 @@ const Basemap = () => {
         getPolZarr("Asian"),
         getPolZarr("Black"),
         getPolZarr("Latino"),
-        getPolZarr("Native")
+        getPolZarr("Native"),
+        getPolZarr("WhiteNoLat")
       ]);
 
       const zarrData = await Promise.all(results.map((result, index) =>
@@ -223,7 +247,8 @@ const Basemap = () => {
         setAsian_curr(zarrData[2]),
         setBlack_curr(zarrData[3]),
         setLatino_curr(zarrData[4]),
-        setNative_curr(zarrData[5])
+        setNative_curr(zarrData[5]),
+        setWhite_curr(zarrData[6])
       ]);
     };
     fetchZarrData();
@@ -236,38 +261,11 @@ const Basemap = () => {
   },[Pop_curr]);
 
   const handleUSMetrics = (index) => {
-    // const Pop_could = await getPolZarr("TotalPop");
-    // const MR_could = await getPolZarr("MortalityRate");
-    // const Asian_cloud = await getPolZarr("Asian");
-    // const Black_cloud = await getPolZarr("Black");
-    // const Latino_cloud = await getPolZarr("Latino");
-    // const Native_cloud = await getPolZarr("Native");
-
-    // let Pop_curr = await Pop_could
-    //   .get([slice(null, 52411),])
-    //   .then(async (data) => await data.data);
-    // let MR_curr = await MR_could
-    //   .get([slice(null, 52411),])
-    //   .then(async (data) => await data.data);
-    // // console.log("death", MR_curr);
-    // let Asian_curr = await Asian_cloud
-    //   .get([slice(null, 52411),])
-    //   .then(async (data) => await data.data);
-    // let Black_curr = await Black_cloud
-    //   .get([slice(null, 52411),])
-    //   .then(async (data) => await data.data);
-    // let Latino_curr = await Latino_cloud
-    //   .get([slice(null, 52411),])
-    //   .then(async (data) => await data.data);
-    // let Native_curr = await Native_cloud
-    //   .get([slice(null, 52411),])
-    //   .then(async (data) => await data.data);
-
     console.log("Pop_curr",Pop_curr);
     let tmpTotal = 0;
     let tmpDsk = 0;
-    let totalPop = 0, totalAsian = 0, totalBlack = 0, totalLati = 0, totalNative = 0;
-    let weightedSum = 0, weightedSumA = 0, weightedSumB = 0, weightedSumL = 0, weightedSumN = 0;
+    let totalPop = 0, totalAsian = 0, totalBlack = 0, totalLati = 0, totalNative = 0, totalWhite = 0;
+    let weightedSum = 0, weightedSumA = 0, weightedSumB = 0, weightedSumL = 0, weightedSumN = 0, weightedSumW = 0;
     console.log("emission", emission);
     for (let i = 0; i < 52411; i++) {
       let curr = data.features[i].properties.TotalPM25
@@ -283,32 +281,42 @@ const Basemap = () => {
       totalLati += Latino_curr[i];
       weightedSumN += curr * Native_curr[i];
       totalNative += Native_curr[i];
+      weightedSumW += curr * White_curr[i];
+      totalWhite += White_curr[i];
       tmpDsk += (Math.exp(Math.log(1.06)/10 * curr) - 1) * Pop_curr[i] * 1.0465819687408728 * MR_curr[i] / 100000 * 1.025229357798165;
     }
 
     setTotal(tmpTotal);
-    setDeathsK(tmpDsk);
+    setDeathsK([tmpDsk, deathsK[index]]);
     setPWAvg([weightedSum/totalPop, PWAvg[index]]);
-    setAsian([weightedSumA/totalAsian, Asian[index]]);
-    setBlack([weightedSumB/totalBlack, Black[index]]);
-    setLatino([weightedSumL/totalLati, Latino[index]]);
-    setNative([weightedSumN/totalNative, Native[index]]);
+    setAsian(prevState => ({
+      ppl: totalAsian,
+      conc: [weightedSumA/totalAsian, prevState.conc[index]]
+    }));
+    setBlack(prevState => ({
+      ppl: totalBlack,
+      conc: [weightedSumB/totalBlack, prevState.conc[index]]
+    }));
+    setLatino(prevState => ({
+      ppl: totalLati,
+      conc: [weightedSumL/totalLati, prevState.conc[index]]
+    }));;
+    setNative(prevState => ({
+      ppl: totalLati,
+      conc: [weightedSumN/totalNative, prevState.conc[index]]
+    }));
+    setWhite(prevState => ({
+      ppl: totalWhite,
+      conc: [weightedSumW/totalWhite, prevState.conc[index]]
+    }));
     console.log("population sum",totalPop)
   }
 
   const handleCountyMetrics = (index) => {
-    let countyTmpTotal = 0;
     let countyPol = 0;
-    let countyWeightedSum = 0;
-    let countyWeightedSumA = 0;
-    let countyTotalAsian = 0;
-    let countyWeightedSumB = 0;
-    let countyTotalBlack = 0;
-    let countyWeightedSumL = 0;
-    let countyTotalLati = 0;
-    let countyWeightedSumN = 0;
-    let countyTotalNative = 0;
     let countyDsk = 0;
+    let countyTmpTotal = 0, countyTotalAsian = 0, countyTotalBlack = 0, countyTotalLati = 0, countyTotalNative = 0, countyTotalWhite = 0;
+    let countyWeightedSum = 0, countyWeightedSumA = 0, countyWeightedSumB = 0, countyWeightedSumL = 0, countyWeightedSumN = 0, countyWeightedSumW = 0;
     let dict = selectedCounty.properties.area_frac;
     for (var key in dict) {
       let curr = data.features[key].properties.TotalPM25 * dict[key];
@@ -324,16 +332,34 @@ const Basemap = () => {
       countyTotalLati += Latino_curr[key];
       countyWeightedSumN += curr * Native_curr[key] * dict[key];
       countyTotalNative += Native_curr[key];
+      countyWeightedSumW += curr * White_curr[key] * dict[key];
+      countyTotalWhite += White_curr[key];
       countyDsk += (Math.exp(Math.log(1.06)/10 * curr) - 1) * pop * 1.0465819687408728 * MR_curr[key] * dict[key] / 100000 * 1.025229357798165;
     }
     setCountyTotal(countyPol);
     setCountyDeathsK([countyDsk, countyDeathsK[index]]);
     setCountyPWAvg([countyWeightedSum/countyPol, countyPWAvg[index]]);
-    setCountyAsian([countyWeightedSumA/countyTotalAsian, countyAsian[index]]);
-    setCountyBlack([countyWeightedSumB/countyTotalBlack, countyBlack[index]]);
-    setCountyLatino([countyWeightedSumL/countyTotalLati, countyLatino[index]]);
-    setCountyNative([countyWeightedSumN/countyTotalNative, countyNative[index]]);
-  }
+    setCountyAsian(prevState => ({
+      ppl: countyTotalAsian,
+      conc: [countyWeightedSumA/countyTotalAsian, prevState.conc[index]]
+    }));
+    setCountyBlack(prevState => ({
+      ppl: countyTotalBlack,
+      conc: [countyWeightedSumB/countyTotalBlack, prevState.conc[index]]
+    }));
+    setCountyLatino(prevState => ({
+      ppl: countyTotalLati,
+      conc: [countyWeightedSumL/countyTotalLati, prevState.conc[index]]
+    }));
+    setCountyNative(prevState => ({
+      ppl: countyTotalNative,
+      conc: [countyWeightedSumN/countyTotalNative, prevState.conc[index]]
+    }));
+    setCountyWhite(prevState => ({
+      ppl: countyTotalWhite,
+      conc: [countyWeightedSumW/countyTotalWhite, prevState.conc[index]]
+    }));
+  };
 
   const handleCountyChange = (event, newValue) => {
     if (newValue != null) {
@@ -397,20 +423,7 @@ const Basemap = () => {
     setLoading(true);
     setActiveStep(4);
     setDisable(true);
-    const src_could = await getSourceZarr(
-      sector === "Agriculture" ? "Ag": 
-      sector === "Industrial" ? "Industrial":
-      sector === "Coal electric generation" ? "Coal_Elec":
-      sector === "Noncoal electric generation" ? "Non-Coal_Elec":
-      sector === "Residential wood combustion" ? "Res_Wood":
-      sector === "Residential gas combustion" ? "Res_Gas":
-      sector === "Residential other" ? "Res_Other":
-      sector === "Road dust" ? "Road_Dst":
-      sector === "Commercial cooking" ? "Cooking":
-      sector === "Miscellaneous" ? "Misc":
-      sector === "Off-highway vehicles & equipments" ? "Offroad":
-      sector === "Construction" ? "Const":
-      sector === "Heavy duty diesel vehicles" ? "Diesel_HD_Veh": "Gas_LD_Veh")
+    const src_could = await getSourceZarr(sectors[sector]);
     
     console.log("geoID", geoID);
     console.log("county_ind", location);
@@ -441,6 +454,7 @@ const Basemap = () => {
   }
 
   const handleReset = async () => {
+    setViewState(INITIAL_VIEW_STATE);
     setDisable(true);
     setActiveStep(0);
     setEmission(50);
@@ -449,15 +463,57 @@ const Basemap = () => {
     setSector("");
     setSelectedCounty(null);
     setTotal(0.0);
-    setPWAvg([0,null]);
-    setAsian([0,null]);
-    setBlack([0,null]);
-    setLatino([0,null]);
-    setNative([0,null]);
-    setDeathsK(0.0);
-    setDeathsL(0.0);
-    setViewState(INITIAL_VIEW_STATE);
-    id = id + "1";
+    setLoading(false);
+    setPWAvg([0.0,null]);
+    setDeathsK([0.0,null]);
+    setAsian({
+      ppl: 0.0,
+      conc: [0.0, null]
+    });
+    setBlack({
+      ppl: 0.0,
+      conc: [0.0, null]
+    });
+    setAsian({
+      ppl: 0.0,
+      conc: [0.0, null]
+    });
+    setLatino({
+      ppl: 0.0,
+      conc: [0.0, null]
+    });
+    setNative({
+      ppl: 0.0,
+      conc: [0.0, null]
+    });
+    setWhite({
+      ppl: 0.0,
+      conc: [0.0, null]
+    });
+    setCountyTotal(0.0);
+    setCountyPWAvg([0.0,null]);
+    setCountyDeathsK([0.0,null]);
+    setCountyAsian({
+      ppl: 0.0,
+      conc: [0.0, null]
+    });
+    setCountyBlack({
+      ppl: 0.0,
+      conc: [0.0, null]
+    });
+    setCountyLatino({
+      ppl: 0.0,
+      conc: [0.0, null]
+    });
+    setCountyNative({
+      ppl: 0.0,
+      conc: [0.0, null]
+    });
+    setCountyWhite({
+      ppl: 0.0,
+      conc: [0.0, null]
+    });
+    id = 0;
     data = simulations;
     console.log("new data", data);
     setLayer(
@@ -467,8 +523,8 @@ const Basemap = () => {
         ...options1,
       })
     );
-    console.log('done');
     setDisable(false);
+    console.log('done');
   };
 
   const stepList = [
@@ -529,7 +585,7 @@ const Basemap = () => {
         <Autocomplete
           id="choose-sectors"
           // value={sector}
-          options={sectors}
+          options={Object.keys(sectors)}
           sx={{ width: "300px" , ml: "3px", mt: "6px"}}
           onChange={handleSectorChange}
           renderInput={(params) => 
@@ -612,8 +668,25 @@ const Basemap = () => {
       content:
         <Box>
           <Typography variant="caption">Click on the question you are interested in.</Typography>
-          <ResultBtn onClick={() => setOpenQ1(true)}>How does this impact public health?</ResultBtn>
-          <ResultBtn onClick={() => setOpenQ2(true)}>Who is most affected?</ResultBtn>
+          <InterpreteData
+            PWAvg={PWAvg}
+            Asian={Asian}
+            Black={Black}
+            Latino={Latino}
+            Native={Native}
+            White={White}
+            deathsK={deathsK}
+            countyPWAvg={countyPWAvg}
+            countyAsian={countyAsian}
+            countyBlack={countyBlack}
+            countyLatino={countyLatino}
+            countyNative={countyNative}
+            countyWhite={countyWhite}
+            countyDeathsK={countyDeathsK}
+            selectedCounty={selectedCounty}
+            sector={sector}
+            emission={emission}
+          />
         </Box>
     }
   ];
@@ -642,53 +715,6 @@ const Basemap = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Interpret data */}
-      <Dialog
-        open={openQ1}
-        onClose={handleQ1Close}
-        sx={{ 
-          '& .MuiDialog-paper': { // Apply custom styles
-            minWidth: '1200px', // Minimum width of the dialog
-            minHeight: '700px', // Maximum height of the dialog
-          }
-        }}
-      >
-        <DialogTitle id="alert-dialog-title">
-          {"How does this impact public health?"}
-        </DialogTitle>
-        <DialogContent>
-          show the result here.
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleQ1Close}>Close</Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog
-        open={openQ2}
-        onClose={handleQ2Close}
-        sx={{ 
-          '& .MuiDialog-paper': { // Apply custom styles
-            minWidth: '1200px', // Minimum width of the dialog
-            minHeight: '700px', // Maximum height of the dialog
-          }
-        }}
-      >
-        <DialogTitle id="alert-dialog-title">
-          {"How does this impact public health?"}
-        </DialogTitle>
-        <DialogContent dividers>
-          <h4 style={{lineHeight:"0"}}>Population-Weighted average PM2.5 by racial group </h4>
-          ▪ All population: {PWAvg[0].toPrecision(4)} {PWAvg[1] !== null && ` --> ${PWAvg[1].toPrecision(4)}`} μg/m³<br/>
-          ▪ Asian: {Asian[0].toPrecision(4)} {Asian[1] !== null && ` --> ${Asian[1].toPrecision(4)}`} μg/m³<br/>
-          ▪ Black: {Black[0].toPrecision(4)} {Black[1] !== null && ` --> ${Black[1].toPrecision(4)}`} μg/m³<br/>
-          ▪ Latino: {Latino[0].toPrecision(4)} {Latino[1] !== null && ` --> ${Latino[1].toPrecision(4)}`} μg/m³<br/>
-          ▪ Native: {Native[0].toPrecision(4)} {Native[1] !== null && ` --> ${Native[1].toPrecision(4)}`} μg/m³<br/>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleQ2Close}>Close</Button>
-        </DialogActions>
-      </Dialog>
 
       {/* Map and everything */}
         <Box>
@@ -722,31 +748,9 @@ const Basemap = () => {
               alignItems: 'flex-start',
             }}
           >
-            <Stepper
+            <CustomStepper
               activeStep={activeStep} 
-              orientation="vertical" 
-              sx={{
-                "& .MuiStep-root": {
-                  "& .MuiStepLabel-root": {
-                    padding: 0,
-                    height: 15,
-                  },
-                },
-                "& .MuiStepContent-root": {
-                  ml: "7px",
-                  borderLeft: "3px solid #7F99AE",
-                },
-                "& .MuiStepConnector-line": {
-                  borderLeft: "3px solid #7F99AE",
-                },
-                "& .MuiStepConnector-root": {
-                  ml: "7px",
-                  height: 20,
-                },
-                "& .MuiStep-root:last-child .MuiStepContent-root": {
-                  borderLeft: "none",
-                },
-              }}
+              orientation="vertical"
             >
               {stepList.map((step, index) => (
                 <Step key={step.label} active={isMobileScreens ? undefined : true}>
@@ -758,7 +762,7 @@ const Basemap = () => {
                   </StepContent>
                 </Step>
               ))}
-            </Stepper>
+            </CustomStepper>
             <Stack spacing={2} direction="row" alignItems="center">
               <SentimentVerySatisfiedIcon/>
               <Slider
@@ -799,26 +803,6 @@ const Basemap = () => {
               </Button>
             </Box>
           </Box>
-          {selectedCounty && <Box
-            sx={{
-              position: 'fixed',
-              bottom: 20,
-              right: 20,
-            }}
-          >
-            <h4 style={{lineHeight:"0"}}>Info for {selectedCounty.properties.NAME}</h4>
-            ▪ Total population: {formatNumber(countyTotal)} ppl<br/>
-            ▪ Number of Death: {countyDeathsK[1] !== null && `${formatNumber(countyDeathsK[1])}  --> `} {formatNumber(countyDeathsK[0])} ppl<br/>
-            {/* ▪ Asian:<br/>
-            ▪ Black:<br/>
-            ▪ Latino:<br/>
-            ▪ Native:<br/> */}
-            ▪ Population-weighted: {countyPWAvg[1] !== null && `${countyPWAvg[1].toPrecision(4)}  --> `} {countyPWAvg[0].toPrecision(4)} μg/m³<br/>
-            ▪ Asian-weighted: {countyAsian[1] !== null && `${countyAsian[1].toPrecision(4)} --> `} {countyAsian[0].toPrecision(4)} μg/m³<br/>
-            ▪ Black-weighted: {countyBlack[1] !== null && `${countyBlack[1].toPrecision(4)} --> `} {countyBlack[0].toPrecision(4)} μg/m³<br/>
-            ▪ Latino-weighted: {countyLatino[1] !== null && `${countyLatino[1].toPrecision(4)} --> `} {countyLatino[0].toPrecision(4)} μg/m³<br/>
-            ▪ Native-weighted: {countyNative[1] !== null && `${countyNative[1].toPrecision(4)} --> `} {countyNative[0].toPrecision(4)} μg/m³<br/>
-          </Box>}
         </Box>
     </Box>
   );
